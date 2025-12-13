@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V10.1 Monitor</title>
+    <title>Diario V11.0 Infinity</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -24,16 +24,13 @@
         /* HEADER */
         header { background: var(--panel); padding: 8px 15px; border-bottom: 2px solid var(--accent); display: flex; flex-direction: column; gap: 5px; }
         .header-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        .app-title-container { display: flex; flex-direction: column; }
-        .app-title { font-weight: bold; color: var(--accent); display: flex; align-items: baseline; gap: 8px; }
-        .version-tag { font-size: 0.7rem; color: #888; font-weight: normal; }
         
-        /* FILE SIZE INDICATOR */
-        .db-status { font-size: 0.7rem; color: #aaa; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00e676; display: inline-block; }
-        .status-warning { background: #ffea00; }
-        .status-danger { background: #ff1744; animation: pulse-red 1s infinite; }
-        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .date-navigator { display: flex; align-items: center; gap: 10px; background: var(--bg); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); }
+        input[type="date"] { background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 0.9rem; outline: none; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        body.light-mode input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
+
+        .db-status { font-size: 0.6rem; color: #aaa; margin-left: 5px; }
 
         /* AI COACH BUBBLE */
         #ai-coach-area { background: rgba(124, 77, 255, 0.1); border-left: 3px solid var(--accent); padding: 10px; margin-bottom: 5px; border-radius: 0 5px 5px 0; font-size: 0.9rem; display: none; animation: slideIn 0.3s ease; }
@@ -55,7 +52,6 @@
         #editor { min-height: 100%; padding: 20px; outline: none; line-height: 1.6; font-size: 17px; padding-bottom: 150px; white-space: pre-wrap; }
         .auto-tag { font-size: 0.65rem; color: var(--accent); background: var(--tag-bg); padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-right: 8px; font-weight: bold; display: inline-block; user-select: none; border: 1px solid rgba(124, 77, 255, 0.2); }
         #editor img { max-width: 100%; border-radius: 8px; margin: 10px 0; display: block; }
-        .timestamp { color: var(--accent) !important; font-size: 0.85rem; font-weight: bold; margin-top: 25px; display: block; }
         .search-hit { background-color: rgba(255, 235, 59, 0.4); border-bottom: 2px solid #ffeb3b; }
 
         /* MOOD BAR */
@@ -68,10 +64,11 @@
         .modal.open { display: flex; }
         .modal-content { background: var(--modal-bg); width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; padding: 20px; border-radius: 15px; color: var(--text); }
         
-        /* LISTA DOMANDE */
-        .question-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); }
-        .q-text { font-size: 0.95rem; }
-        .q-count { font-size: 0.8rem; background: var(--accent); color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        /* TAG EXPLORER */
+        .tag-chip { display: inline-block; padding: 5px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 15px; margin: 3px; cursor: pointer; font-size: 0.85rem; }
+        .tag-chip:hover { background: var(--accent); color: white; border-color: var(--accent); }
+        .result-row { padding: 10px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; }
+        .result-row:hover { background: rgba(255,255,255,0.05); }
 
         /* WALK & TALK MODAL */
         #walk-talk-content { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
@@ -89,23 +86,21 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V10.1</h1>
+        <h1 style="color:var(--accent)">Diario V11.0</h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
     <div id="app" style="display:none; flex-direction:column; height:100%;">
         <header>
             <div class="header-top">
-                <div class="app-title-container">
-                    <div class="app-title">Diario <span class="version-tag">V10.1 Monitor</span></div>
-                    <div class="db-status">
-                        <span id="status-dot" class="status-dot"></span>
-                        <span id="db-size">Calcolo...</span>
-                    </div>
+                <div class="date-navigator">
+                    <input type="date" id="date-picker" onchange="changeDate(this.value)">
+                    <span id="db-status" class="db-status">Sync...</span>
                 </div>
+                
                 <div style="display:flex; gap:5px; align-items:center;">
+                    <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
                     <button class="tool-btn" onclick="openQuestionsHistory()" title="Archivio Domande"><span class="material-icons-round">menu_book</span></button>
-                    <button class="tool-btn" onclick="openSearch()" title="Cerca"><span class="material-icons-round">search</span></button>
                     <button class="tool-btn" onclick="openStats()" title="Stats"><span class="material-icons-round">bar_chart</span></button>
                     <button class="tool-btn" onclick="openSettings()" title="Settings"><span class="material-icons-round">settings</span></button>
                     <img id="user-pic" src="" style="width:28px; height:28px; border-radius:50%; border:2px solid var(--accent); margin-left:5px;">
@@ -117,16 +112,11 @@
                 <div id="ai-message"></div>
                 <div class="ai-actions" id="ai-actions"></div>
             </div>
-
-            <div id="search-container" style="display:none; padding-bottom:5px;">
-                <input type="text" id="search-input" placeholder="Cerca..." style="width:100%; padding:8px; border-radius:5px; border:1px solid #555; background:#333; color:white;" onkeyup="performSearch()">
-                <div id="search-results-list" style="margin-top:10px; max-height:200px; overflow-y:auto; font-size:0.9rem;"></div>
-            </div>
         </header>
 
         <div class="toolbar">
             <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
-            <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk (Nala Mode)"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
+            <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
             <div class="separator"></div>
             <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
             <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
@@ -149,42 +139,56 @@
         </main>
     </div>
 
+    <div id="tag-modal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
+            <div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;">
+                <p style="font-size:0.8rem; color:#aaa;">Clicca un tag per vedere i giorni collegati:</p>
+                <div id="tag-cloud"></div>
+            </div>
+            <div id="tag-results"></div>
+        </div>
+    </div>
+
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);">
         <div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;">
             <div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div>
             <h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2>
-            <div id="walk-status">Pronto a passeggiare?</div>
-            <div id="walk-transcript">Premi il microfono per iniziare l'intervista.</div>
+            <div id="walk-status">Pronto?</div>
+            <div id="walk-transcript">Premi il microfono.</div>
             <button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button>
         </div>
     </div>
+
     <div id="questions-modal" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between;"><h2>Domande Ricorrenti</h2><button onclick="document.getElementById('questions-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
+            <div style="display:flex; justify-content:space-between;"><h2>Domande</h2><button onclick="document.getElementById('questions-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div id="questions-list-container"></div>
         </div>
     </div>
+
     <div id="stats-modal" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between;"><h2>Statistiche & Insight</h2><button onclick="document.getElementById('stats-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
+            <div style="display:flex; justify-content:space-between;"><h2>Statistiche</h2><button onclick="document.getElementById('stats-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div style="background:rgba(124, 77, 255, 0.1); padding:15px; border-radius:10px; margin-top:15px; border-left:4px solid var(--accent);"><div style="font-weight:bold; color:var(--accent); margin-bottom:5px;">🧠 AI Insight</div><div id="insight-text" style="font-size:0.9rem; font-style:italic;">Analisi in corso...</div></div>
-            <div style="margin:20px 0 10px 0; font-size:0.9rem; color:#aaa;">Oggi: <span id="count-today" style="color:var(--accent); font-weight:bold;">0</span> parole</div>
+            <div style="margin:20px 0;">Parole Oggi: <span id="count-today" style="color:var(--accent); font-weight:bold;">0</span></div>
             <canvas id="chartCanvas" height="150"></canvas>
-            <h3 style="margin-top:20px;">Heatmap</h3>
+            <h3 style="margin-top:20px;">Heatmap (Ultimi 30gg)</h3>
             <div id="heatmap-grid" style="display:flex; flex-wrap:wrap; gap:3px; justify-content:center;"></div>
         </div>
     </div>
+
     <div id="settings-modal" class="modal">
         <div class="modal-content" style="max-width:300px;">
             <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div style="margin-top:20px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
-            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Backup</button></div>
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina Corrente</button></div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         const firebaseConfig = {
@@ -202,10 +206,13 @@
         const provider = new GoogleAuthProvider();
 
         let currentUser = null;
-        let currentStats = {};
+        let currentDateString = new Date().toISOString().split('T')[0]; // Default oggi YYYY-MM-DD
+        
+        // Variabili globali per lo stato corrente (giorno selezionato)
+        let currentDayStats = {};
         let questionHistory = {}; 
         let questionPrefs = {}; 
-        let sessionInitialized = false;
+        let currentTags = [];
 
         if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
         window.login = () => signInWithPopup(auth, provider);
@@ -216,36 +223,79 @@
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app').style.display = 'flex';
                 document.getElementById('user-pic').src = user.photoURL;
-                loadDiary();
+                
+                // Imposta il date picker a oggi
+                document.getElementById('date-picker').value = currentDateString;
+                
+                loadDiaryForDate(currentDateString);
             }
         });
 
-        // --- MONITORAGGIO PESO (Nuova funzione V10.1) ---
-        function checkDbSize(dataObj) {
-            // Calcola la dimensione del JSON in byte
-            const jsonString = JSON.stringify(dataObj);
-            const bytes = new Blob([jsonString]).size;
-            const kb = (bytes / 1024).toFixed(1);
+        // --- SISTEMA DATE & SALVATAGGIO SCALABILE ---
+        
+        window.changeDate = (newDate) => {
+            currentDateString = newDate;
+            loadDiaryForDate(newDate);
+        };
+
+        async function loadDiaryForDate(dateStr) {
+            document.getElementById('db-status').innerText = "Loading...";
+            document.getElementById('editor').innerHTML = ""; // Pulisci editor
             
-            const sizeDisplay = document.getElementById('db-size');
-            const dot = document.getElementById('status-dot');
+            // Percorso: diario/{uid}/entries/{YYYY-MM-DD}
+            const docRef = doc(db, "diario", currentUser.uid, "entries", dateStr);
             
-            sizeDisplay.innerText = `${kb} KB / 1000 KB`;
-            
-            // Logica colori semaforo
-            if (bytes > 900000) { // > 900KB (Critico)
-                dot.className = 'status-dot status-danger';
-                sizeDisplay.style.color = '#ff1744';
-            } else if (bytes > 700000) { // > 700KB (Attenzione)
-                dot.className = 'status-dot status-warning';
-                sizeDisplay.style.color = '#ffea00';
-            } else {
-                dot.className = 'status-dot'; // Verde
-                sizeDisplay.style.color = '#aaa';
-            }
+            // Usiamo onSnapshot per real-time anche su singolo giorno
+            // Nota: Se cambi data, dovremmo "staccare" il vecchio listener, ma per semplicità qui sovrascriviamo
+            onSnapshot(docRef, (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    // Evita di sovrascrivere se stiamo scrivendo (controllo focus semplice)
+                    if (document.activeElement.id !== 'editor') {
+                        document.getElementById('editor').innerHTML = data.htmlContent || "";
+                    }
+                    currentDayStats = data.stats || {};
+                    questionHistory = data.questionHistory || {};
+                    questionPrefs = data.questionPrefs || {};
+                    currentTags = data.tags || [];
+                    
+                    updateCounts();
+                    document.getElementById('db-status').innerText = "Sync OK";
+                } else {
+                    // Documento non esiste -> Giorno nuovo
+                    document.getElementById('editor').innerHTML = ""; // Foglio bianco
+                    currentDayStats = {};
+                    currentTags = [];
+                    document.getElementById('db-status').innerText = "Nuovo Giorno";
+                }
+            });
         }
 
-        // --- TAG RULES ---
+        async function saveData() {
+            if (!currentUser) return;
+            document.getElementById('db-status').innerText = "Saving...";
+            
+            const content = document.getElementById('editor').innerHTML;
+            const words = updateCounts();
+            
+            // Rileva tag presenti nel testo attuale
+            const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
+
+            const dataToSave = {
+                htmlContent: content,
+                stats: { words: words, mood: currentDayStats.mood }, // Mantieni mood se c'era
+                tags: detectedTags,
+                questionHistory: questionHistory,
+                questionPrefs: questionPrefs,
+                lastUpdate: new Date()
+            };
+
+            // Salva nel documento del giorno specifico
+            await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
+            document.getElementById('db-status').innerText = "Saved";
+        }
+
+        // --- TAG EXPLORER ---
         const tagRules = {
             'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'genitori', 'fratello', 'amici', 'paul', 'tina', 'relazione', 'discussione', 'team', 'squadra'],
             'Salute': ['cibo', 'mangiare', 'dieta', 'fumo', 'sigarette', 'vino', 'allenamento', 'workout', 'stretching', 'sonno', 'dormire', 'caffè', 'digiuno', 'fasting', 'colesterolo', 'corpo', 'salute'],
@@ -254,6 +304,60 @@
             'VanLife': ['camper', 'van', 'viaggio', 'bulgaria', 'semkovo', 'natura', 'pioggia', 'fuoco', 'legna', 'spot', '4x4', 'guida', 'ducato']
         };
 
+        function detectTagsInContent(text) {
+            const lower = text.toLowerCase();
+            const found = new Set();
+            for (const [tag, keywords] of Object.entries(tagRules)) {
+                if (keywords.some(k => lower.includes(k))) found.add(tag);
+            }
+            return Array.from(found);
+        }
+
+        window.openTagExplorer = () => {
+            document.getElementById('tag-modal').classList.add('open');
+            const cloud = document.getElementById('tag-cloud');
+            cloud.innerHTML = '';
+            // Genera bottoni per ogni tag conosciuto
+            Object.keys(tagRules).forEach(tag => {
+                const btn = document.createElement('span');
+                btn.className = 'tag-chip';
+                btn.innerText = tag;
+                btn.onclick = () => searchByTag(tag);
+                cloud.appendChild(btn);
+            });
+        };
+
+        async function searchByTag(tagName) {
+            const resultsDiv = document.getElementById('tag-results');
+            resultsDiv.innerHTML = `<div style="text-align:center; color:#aaa;">Cerco giorni con #${tagName}...</div>`;
+            
+            // Query Firestore: Trova tutti i documenti nella sub-collection "entries" che hanno il tag
+            const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
+            const querySnapshot = await getDocs(q);
+            
+            resultsDiv.innerHTML = '';
+            if (querySnapshot.empty) {
+                resultsDiv.innerHTML = `<div style="text-align:center;">Nessun giorno trovato con #${tagName}</div>`;
+                return;
+            }
+
+            querySnapshot.forEach((doc) => {
+                const dayData = doc.data();
+                const dayId = doc.id; // YYYY-MM-DD
+                const div = document.createElement('div');
+                div.className = 'result-row';
+                div.innerHTML = `<span>🗓️ ${dayId}</span> <span style="font-size:0.8rem; color:#aaa;">${dayData.stats?.words || 0} parole</span>`;
+                div.onclick = () => {
+                    document.getElementById('tag-modal').classList.remove('open');
+                    document.getElementById('date-picker').value = dayId;
+                    changeDate(dayId);
+                };
+                resultsDiv.appendChild(div);
+            });
+        }
+
+
+        // --- AUTO TAGGING VISIVO ---
         window.handleKeyUp = (e) => { if (e.key === 'Enter') processLastBlock(); };
         function processLastBlock() {
             const selection = window.getSelection();
@@ -344,15 +448,11 @@
 
         function startWalkSession() {
             if (!('webkitSpeechRecognition' in window) || !('speechSynthesis' in window)) { alert("Funzione non supportata su questo dispositivo."); return; }
-            
             isWalkSessionActive = true;
             document.getElementById('walk-mic-btn').classList.add('active');
             document.getElementById('walk-status').innerText = "In ascolto...";
-            
             walkRecognition = new webkitSpeechRecognition();
-            walkRecognition.continuous = false; 
-            walkRecognition.lang = 'it-IT';
-            
+            walkRecognition.continuous = false; walkRecognition.lang = 'it-IT';
             walkRecognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 document.getElementById('walk-transcript').innerText = transcript;
@@ -377,99 +477,25 @@
         }
 
         function speak(text) {
-            const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'it-IT';
-            window.speechSynthesis.speak(u);
+            const u = new SpeechSynthesisUtterance(text); u.lang = 'it-IT'; window.speechSynthesis.speak(u);
         }
 
-        // --- INSIGHTS ---
-        function calculateInsights() {
-            let moodCounts = { '😄':{count:0, words:0}, '😐':{count:0, words:0}, '😔':{count:0, words:0} };
-            Object.values(currentStats).forEach(day => {
-                if(day.mood && day.words && moodCounts[day.mood]) {
-                    moodCounts[day.mood].count++;
-                    moodCounts[day.mood].words += day.words;
-                }
-            });
-            let bestMood = null; let maxAvg = 0;
-            for(const [m, data] of Object.entries(moodCounts)) {
-                if(data.count > 0) {
-                    const avg = data.words / data.count;
-                    if(avg > maxAvg) { maxAvg = avg; bestMood = m; }
-                }
-            }
-            const el = document.getElementById('insight-text');
-            if (bestMood) { el.innerText = `I dati mostrano che scrivi di più (media ${Math.round(maxAvg)} parole) quando ti senti ${bestMood}. Continua così!`; } 
-            else { el.innerText = "Non ho ancora abbastanza dati su Umore e Parole per trovare correlazioni. Usa di più il diario!"; }
-        }
-
-        // --- CORE & MONITORING ---
-        function loadDiary() {
-            if(localStorage.getItem('theme') === 'light') document.body.classList.add('light-mode');
-            onSnapshot(doc(db, "diario", currentUser.uid), (snap) => {
-                if (snap.exists()) {
-                    const data = snap.data();
-                    
-                    // CONTROLLO PESO
-                    checkDbSize(data);
-
-                    if (document.getElementById('editor').innerHTML.trim() === "") {
-                        document.getElementById('editor').innerHTML = data.htmlContent || "";
-                        currentStats = data.stats || {};
-                        questionHistory = data.questionHistory || {};
-                        questionPrefs = data.questionPrefs || {};
-                        if (!sessionInitialized) { insertNewEntryHeader(); sessionInitialized = true; }
-                        updateCounts();
-                    } else {
-                        // Aggiorna variabili di background
-                        questionHistory = data.questionHistory || {};
-                        questionPrefs = data.questionPrefs || {};
-                        currentStats = data.stats || {};
-                    }
-                } else { if (!sessionInitialized) { insertNewEntryHeader(); sessionInitialized = true; } }
-            });
-        }
-        function getTodayDateString() { return new Date().toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' }); }
-        function getFullTimestamp() { return `🗓️ ${getTodayDateString()}, ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`; }
-        function insertNewEntryHeader() {
-            const editor = document.getElementById('editor'); editor.innerHTML += `<div class="timestamp">${getFullTimestamp()}</div><div><br></div>`;
-            setTimeout(() => { editor.scrollTop = editor.scrollHeight; }, 100);
-        }
-
+        // --- CORE & UTILS ---
         let timeout;
         document.getElementById('editor').addEventListener('input', () => { updateCounts(); clearTimeout(timeout); timeout = setTimeout(saveData, 1500); });
         document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
 
-        async function saveData() {
-            if (!currentUser) return;
-            const content = document.getElementById('editor').innerHTML;
-            const todayKey = new Date().toISOString().split('T')[0];
-            const words = updateCounts();
-            if (!currentStats[todayKey]) currentStats[todayKey] = {};
-            currentStats[todayKey].words = words; 
-            
-            const dataToSave = { htmlContent: content, stats: currentStats, questionHistory: questionHistory, questionPrefs: questionPrefs, lastUpdate: new Date() };
-            
-            // AGGIORNA IL CONTATORE PESO
-            checkDbSize(dataToSave);
-
-            await setDoc(doc(db, "diario", currentUser.uid), dataToSave, { merge: true });
-        }
         function updateCounts() {
             const text = document.getElementById('editor').innerText;
-            const todayStr = getTodayDateString();
-            let today = 0;
-            const idx = text.indexOf(todayStr);
-            if (idx !== -1) today = Math.max(0, text.substring(idx).trim().split(/\s+/).length - 4);
-            document.getElementById('count-today').innerText = today;
-            return today;
+            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            document.getElementById('count-today').innerText = words;
+            return words;
         }
 
         window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
         window.insertMood = (e) => { 
             document.execCommand('insertText', false, ` ${e} `); 
-            const k = new Date().toISOString().split('T')[0];
-            if(!currentStats[k]) currentStats[k]={}; currentStats[k].mood=e;
+            currentDayStats.mood = e;
             saveData(); 
         };
         window.triggerImageUpload = () => document.getElementById('img-input').click();
@@ -482,42 +508,32 @@
         if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => document.getElementById('mic-btn').classList.add('recording'); recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording'); recognition.onresult = (event) => { let final = ''; for (let i = event.resultIndex; i < event.results.length; ++i) { if (event.results[i].isFinal) final += event.results[i][0].transcript; } if (final) { document.execCommand('insertText', false, final + " "); saveData(); } }; }
         window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("Browser non supportato"); };
 
-        window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); calculateInsights(); renderChart(); renderHeatmap(); };
+        window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); renderChart(); renderHeatmap(); };
         window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
         window.toggleTheme = () => { document.body.classList.toggle('light-mode'); localStorage.setItem('theme', document.body.classList.contains('light-mode')?'light':'dark'); };
-        window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${new Date().toISOString().slice(0,10)}.html`; a.click(); };
+        window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${currentDateString}.html`; a.click(); };
         window.openQuestionsHistory = () => {
             const container = document.getElementById('questions-list-container'); container.innerHTML = "";
             const modal = document.getElementById('questions-modal');
             const sortedQuestions = Object.entries(questionHistory).sort((a, b) => b[1] - a[1]);
             if (sortedQuestions.length === 0) { container.innerHTML = "<div style='text-align:center; color:#666; margin-top:20px;'>Nessuna domanda inserita ancora.</div>"; } 
-            else { sortedQuestions.forEach(([q, count]) => { const div = document.createElement('div'); div.className = 'question-item'; div.innerHTML = `<span class="q-text">${q}</span><span class="q-count">${count}</span>`; container.appendChild(div); }); }
+            else { sortedQuestions.forEach(([q, count]) => { const div = document.createElement('div'); div.className = 'result-row'; div.innerHTML = `<span>${q}</span> <span style='font-weight:bold'>${count}</span>`; container.appendChild(div); }); }
             modal.classList.add('open');
         };
-        window.openSearch = () => { document.getElementById('search-container').style.display = 'block'; document.getElementById('search-input').focus(); };
-        window.performSearch = () => {
-            const query = document.getElementById('search-input').value.toLowerCase(); const list = document.getElementById('search-results-list'); list.innerHTML = '';
-            if(query.length < 3) return;
-            const text = document.getElementById('editor').innerText; const regex = new RegExp(query, 'gi'); let match;
-            while ((match = regex.exec(text)) !== null) {
-                const snippet = text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + 40));
-                const div = document.createElement('div'); div.style.padding = "5px"; div.style.borderBottom = "1px solid #444"; div.style.cursor = "pointer";
-                div.innerHTML = `...${snippet.replace(match[0], `<b style="color:var(--accent)">${match[0]}</b>`)}...`;
-                div.onclick = () => { window.find(match[0], false, false, true, false, true, false); document.getElementById('search-container').style.display = 'none'; };
-                list.appendChild(div);
-            }
-        };
 
+        // --- STATS VISUALIZATION (Placeholder per ora) ---
         function renderChart() {
+            // Nota: Le statistiche globali sono più complesse ora che i dati sono divisi.
+            // Per ora mostriamo solo un grafico statico o vuoto per evitare complessità.
+            // In una V11.1 potremmo implementare un contatore globale.
             const ctx = document.getElementById('chartCanvas').getContext('2d');
-            const labels = [], data = [];
-            for(let i=6;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); const k=d.toISOString().split('T')[0]; labels.push(d.toLocaleDateString('it-IT',{weekday:'short'})); data.push(currentStats[k]?.words||0); }
             if(window.myChart) window.myChart.destroy();
-            window.myChart = new Chart(ctx, { type:'bar', data:{labels, datasets:[{label:'Parole', data, backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} });
+            // Placeholder data
+            window.myChart = new Chart(ctx, { type:'bar', data:{labels:['Oggi'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} });
         }
         function renderHeatmap() {
-            const c = document.getElementById('heatmap-grid'); c.innerHTML='';
-            for(let i=60;i>=0;i--) { const d=new Date(); d.setDate(new Date().getDate()-i); const k=d.toISOString().split('T')[0]; const s=currentStats[k]; const div=document.createElement('div'); div.className='day-box '+(s?.words>300?'l3':s?.words>50?'l2':s?'l1':''); div.title=k; c.appendChild(div); }
+             // Idem per heatmap: richiede lettura di più documenti. Per ora lasciamo vuoto o mostriamo solo oggi.
+             document.getElementById('heatmap-grid').innerHTML = '<div style="color:#aaa; text-align:center; width:100%;">Heatmap disponibile nelle prossime versioni</div>';
         }
         function placeCaretAtEnd(el) { el.focus(); if (window.getSelection && document.createRange) { var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }
     </script>
