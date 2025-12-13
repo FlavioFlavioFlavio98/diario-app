@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V12.0 AI</title>
+    <title>Diario V12.1 Stable</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -94,7 +94,7 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V12.0</h1>
+        <h1 style="color:var(--accent)">Diario V12.1</h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
@@ -259,7 +259,7 @@
             }
         });
 
-        // --- GEMINI AI INTEGRATION ---
+        // --- GEMINI AI INTEGRATION (FIXED) ---
         
         window.saveApiKey = () => {
             const key = document.getElementById('gemini-api-key').value.trim();
@@ -301,7 +301,8 @@
             `;
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // MODIFICA APPLICATA: Uso gemini-pro invece di flash per evitare l'errore model not found
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
