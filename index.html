@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V11.0 Infinity</title>
+    <title>Diario V12.0 AI</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
     
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <style>
         :root { --bg: #1e1e1e; --text: #e0e0e0; --accent: #7c4dff; --panel: #252526; --border: #333; --modal-bg: #2d2d2d; --tag-bg: #333; }
@@ -70,6 +71,13 @@
         .result-row { padding: 10px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; }
         .result-row:hover { background: rgba(255,255,255,0.05); }
 
+        /* AI SUMMARY MODAL */
+        #ai-summary-content { line-height: 1.6; }
+        #ai-summary-content h3 { color: var(--accent); margin-top: 0; }
+        #ai-summary-content ul { padding-left: 20px; }
+        #ai-summary-content li { margin-bottom: 5px; }
+        .ai-loading { text-align: center; color: var(--accent); padding: 20px; animation: pulse 1s infinite; }
+
         /* WALK & TALK MODAL */
         #walk-talk-content { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
         #walk-status { font-size: 1.5rem; margin-bottom: 20px; color: var(--accent); font-weight: bold; }
@@ -86,7 +94,7 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V11.0</h1>
+        <h1 style="color:var(--accent)">Diario V12.0</h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
@@ -117,7 +125,10 @@
         <div class="toolbar">
             <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
             <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
+            <button class="tool-btn" onclick="generateAiSummary()" title="Riassunto AI"><span class="material-icons-round" style="color:#29b6f6;">auto_awesome</span></button>
+            
             <div class="separator"></div>
+            
             <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
             <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
             <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
@@ -137,6 +148,17 @@
         <main>
             <div id="editor" contenteditable="true" onkeyup="handleKeyUp(event)"></div>
         </main>
+    </div>
+
+    <div id="summary-modal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between;">
+                <h2>Riassunto AI 🤖</h2>
+                <button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
+            </div>
+            <div id="ai-summary-content">
+                </div>
+        </div>
     </div>
 
     <div id="tag-modal" class="modal">
@@ -182,7 +204,13 @@
         <div class="modal-content" style="max-width:300px;">
             <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div style="margin-top:20px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
-            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina Corrente</button></div>
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
+            
+            <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+            <h3>🤖 Google Gemini AI</h3>
+            <p style="font-size:0.8rem; color:#aaa;">Inserisci qui la tua API Key di Google AI Studio per abilitare il riassunto intelligente.</p>
+            <input type="password" id="gemini-api-key" placeholder="Incolla AIzaSy..." style="width:100%; padding:10px; margin-top:5px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:5px;">
+            <button style="width:100%; padding:10px; margin-top:10px; background:var(--accent); color:white; border:none; border-radius:5px;" onclick="saveApiKey()">Salva Chiave</button>
         </div>
     </div>
 
@@ -206,9 +234,7 @@
         const provider = new GoogleAuthProvider();
 
         let currentUser = null;
-        let currentDateString = new Date().toISOString().split('T')[0]; // Default oggi YYYY-MM-DD
-        
-        // Variabili globali per lo stato corrente (giorno selezionato)
+        let currentDateString = new Date().toISOString().split('T')[0]; 
         let currentDayStats = {};
         let questionHistory = {}; 
         let questionPrefs = {}; 
@@ -223,47 +249,103 @@
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app').style.display = 'flex';
                 document.getElementById('user-pic').src = user.photoURL;
-                
-                // Imposta il date picker a oggi
                 document.getElementById('date-picker').value = currentDateString;
                 
+                // Carica API Key salvata
+                const savedKey = localStorage.getItem('GEMINI_API_KEY');
+                if(savedKey) document.getElementById('gemini-api-key').value = savedKey;
+
                 loadDiaryForDate(currentDateString);
             }
         });
 
+        // --- GEMINI AI INTEGRATION ---
+        
+        window.saveApiKey = () => {
+            const key = document.getElementById('gemini-api-key').value.trim();
+            if(key) {
+                localStorage.setItem('GEMINI_API_KEY', key);
+                alert("Chiave salvata! Ora puoi usare la magia ✨");
+                document.getElementById('settings-modal').classList.remove('open');
+            }
+        };
+
+        window.generateAiSummary = async () => {
+            const apiKey = localStorage.getItem('GEMINI_API_KEY');
+            if (!apiKey) {
+                alert("Per usare l'AI devi prima inserire la tua API Key nelle Impostazioni ⚙️");
+                document.getElementById('settings-modal').classList.add('open');
+                return;
+            }
+
+            const text = document.getElementById('editor').innerText.trim();
+            if (text.length < 50) {
+                alert("Scrivi almeno un po' di più prima di chiedere un riassunto!");
+                return;
+            }
+
+            document.getElementById('summary-modal').classList.add('open');
+            const contentDiv = document.getElementById('ai-summary-content');
+            contentDiv.innerHTML = '<div class="ai-loading">Analizzo la tua giornata... 🧠</div>';
+
+            const prompt = `
+                Sei un assistente personale empatico e saggio. Analizza questa pagina di diario.
+                
+                Fai queste 3 cose:
+                1. **Riassunto:** In 3 punti elenco, riassumi cosa è successo oggi.
+                2. **Insight:** Trova un pattern o un collegamento interessante tra i pensieri (es. "Noti come ti senti meglio quando...").
+                3. **Consiglio:** Dai un piccolo consiglio pratico basato su ciò che è stato scritto.
+
+                Testo del diario:
+                "${text}"
+            `;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                const aiText = data.candidates[0].content.parts[0].text;
+                // Usa 'marked' per trasformare il markdown di Gemini in HTML carino
+                contentDiv.innerHTML = marked.parse(aiText);
+
+            } catch (error) {
+                console.error(error);
+                contentDiv.innerHTML = `<div style="color:red; text-align:center;">Errore AI: ${error.message}<br>Controlla la tua API Key.</div>`;
+            }
+        };
+
+
         // --- SISTEMA DATE & SALVATAGGIO SCALABILE ---
         
-        window.changeDate = (newDate) => {
-            currentDateString = newDate;
-            loadDiaryForDate(newDate);
-        };
+        window.changeDate = (newDate) => { currentDateString = newDate; loadDiaryForDate(newDate); };
 
         async function loadDiaryForDate(dateStr) {
             document.getElementById('db-status').innerText = "Loading...";
-            document.getElementById('editor').innerHTML = ""; // Pulisci editor
-            
-            // Percorso: diario/{uid}/entries/{YYYY-MM-DD}
+            document.getElementById('editor').innerHTML = ""; 
             const docRef = doc(db, "diario", currentUser.uid, "entries", dateStr);
-            
-            // Usiamo onSnapshot per real-time anche su singolo giorno
-            // Nota: Se cambi data, dovremmo "staccare" il vecchio listener, ma per semplicità qui sovrascriviamo
             onSnapshot(docRef, (snap) => {
                 if (snap.exists()) {
                     const data = snap.data();
-                    // Evita di sovrascrivere se stiamo scrivendo (controllo focus semplice)
-                    if (document.activeElement.id !== 'editor') {
-                        document.getElementById('editor').innerHTML = data.htmlContent || "";
-                    }
+                    if (document.activeElement.id !== 'editor') { document.getElementById('editor').innerHTML = data.htmlContent || ""; }
                     currentDayStats = data.stats || {};
                     questionHistory = data.questionHistory || {};
                     questionPrefs = data.questionPrefs || {};
                     currentTags = data.tags || [];
-                    
                     updateCounts();
                     document.getElementById('db-status').innerText = "Sync OK";
                 } else {
-                    // Documento non esiste -> Giorno nuovo
-                    document.getElementById('editor').innerHTML = ""; // Foglio bianco
+                    document.getElementById('editor').innerHTML = ""; 
                     currentDayStats = {};
                     currentTags = [];
                     document.getElementById('db-status').innerText = "Nuovo Giorno";
@@ -274,23 +356,17 @@
         async function saveData() {
             if (!currentUser) return;
             document.getElementById('db-status').innerText = "Saving...";
-            
             const content = document.getElementById('editor').innerHTML;
             const words = updateCounts();
-            
-            // Rileva tag presenti nel testo attuale
             const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
-
             const dataToSave = {
                 htmlContent: content,
-                stats: { words: words, mood: currentDayStats.mood }, // Mantieni mood se c'era
+                stats: { words: words, mood: currentDayStats.mood }, 
                 tags: detectedTags,
                 questionHistory: questionHistory,
                 questionPrefs: questionPrefs,
                 lastUpdate: new Date()
             };
-
-            // Salva nel documento del giorno specifico
             await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
             document.getElementById('db-status').innerText = "Saved";
         }
@@ -307,57 +383,35 @@
         function detectTagsInContent(text) {
             const lower = text.toLowerCase();
             const found = new Set();
-            for (const [tag, keywords] of Object.entries(tagRules)) {
-                if (keywords.some(k => lower.includes(k))) found.add(tag);
-            }
+            for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) found.add(tag); }
             return Array.from(found);
         }
 
         window.openTagExplorer = () => {
             document.getElementById('tag-modal').classList.add('open');
-            const cloud = document.getElementById('tag-cloud');
-            cloud.innerHTML = '';
-            // Genera bottoni per ogni tag conosciuto
+            const cloud = document.getElementById('tag-cloud'); cloud.innerHTML = '';
             Object.keys(tagRules).forEach(tag => {
-                const btn = document.createElement('span');
-                btn.className = 'tag-chip';
-                btn.innerText = tag;
-                btn.onclick = () => searchByTag(tag);
-                cloud.appendChild(btn);
+                const btn = document.createElement('span'); btn.className = 'tag-chip'; btn.innerText = tag; btn.onclick = () => searchByTag(tag); cloud.appendChild(btn);
             });
         };
 
         async function searchByTag(tagName) {
             const resultsDiv = document.getElementById('tag-results');
             resultsDiv.innerHTML = `<div style="text-align:center; color:#aaa;">Cerco giorni con #${tagName}...</div>`;
-            
-            // Query Firestore: Trova tutti i documenti nella sub-collection "entries" che hanno il tag
             const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
             const querySnapshot = await getDocs(q);
-            
             resultsDiv.innerHTML = '';
-            if (querySnapshot.empty) {
-                resultsDiv.innerHTML = `<div style="text-align:center;">Nessun giorno trovato con #${tagName}</div>`;
-                return;
-            }
-
+            if (querySnapshot.empty) { resultsDiv.innerHTML = `<div style="text-align:center;">Nessun giorno trovato con #${tagName}</div>`; return; }
             querySnapshot.forEach((doc) => {
                 const dayData = doc.data();
-                const dayId = doc.id; // YYYY-MM-DD
-                const div = document.createElement('div');
-                div.className = 'result-row';
+                const dayId = doc.id;
+                const div = document.createElement('div'); div.className = 'result-row';
                 div.innerHTML = `<span>🗓️ ${dayId}</span> <span style="font-size:0.8rem; color:#aaa;">${dayData.stats?.words || 0} parole</span>`;
-                div.onclick = () => {
-                    document.getElementById('tag-modal').classList.remove('open');
-                    document.getElementById('date-picker').value = dayId;
-                    changeDate(dayId);
-                };
+                div.onclick = () => { document.getElementById('tag-modal').classList.remove('open'); document.getElementById('date-picker').value = dayId; changeDate(dayId); };
                 resultsDiv.appendChild(div);
             });
         }
 
-
-        // --- AUTO TAGGING VISIVO ---
         window.handleKeyUp = (e) => { if (e.key === 'Enter') processLastBlock(); };
         function processLastBlock() {
             const selection = window.getSelection();
@@ -381,7 +435,6 @@
             return null;
         }
 
-        // --- BRAINSTORMING ---
         const allPrompts = [ "Qual è l'unica cosa che renderà oggi un successo?", "Come puoi guadagnare punti salute oggi?", "Cosa puoi fare per Simona o Nala stamattina?", "Cosa è andato bene oggi?", "Cosa avresti potuto gestire meglio?", "Cosa ti sta preoccupando?", "Se i soldi non fossero un problema, cosa faresti?", "Qual è il collo di bottiglia nel business?", "Per quale persona sei grato oggi?", "Quale sfida hai superato oggi?", "Qual è un bel ricordo che ti è tornato in mente?" ];
         let currentPromptText = ""; 
 
@@ -434,17 +487,13 @@
             area.style.display = 'block';
         }
 
-        // --- WALK & TALK ---
         let walkRecognition = null;
         let isWalkSessionActive = false;
         
         window.openWalkTalk = () => { document.getElementById('walk-talk-modal').classList.add('open'); };
         window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
 
-        window.toggleWalkSession = () => {
-            if(isWalkSessionActive) stopWalkSession();
-            else startWalkSession();
-        };
+        window.toggleWalkSession = () => { if(isWalkSessionActive) stopWalkSession(); else startWalkSession(); };
 
         function startWalkSession() {
             if (!('webkitSpeechRecognition' in window) || !('speechSynthesis' in window)) { alert("Funzione non supportata su questo dispositivo."); return; }
@@ -476,11 +525,8 @@
             window.speechSynthesis.cancel();
         }
 
-        function speak(text) {
-            const u = new SpeechSynthesisUtterance(text); u.lang = 'it-IT'; window.speechSynthesis.speak(u);
-        }
+        function speak(text) { const u = new SpeechSynthesisUtterance(text); u.lang = 'it-IT'; window.speechSynthesis.speak(u); }
 
-        // --- CORE & UTILS ---
         let timeout;
         document.getElementById('editor').addEventListener('input', () => { updateCounts(); clearTimeout(timeout); timeout = setTimeout(saveData, 1500); });
         document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
@@ -493,11 +539,7 @@
         }
 
         window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
-        window.insertMood = (e) => { 
-            document.execCommand('insertText', false, ` ${e} `); 
-            currentDayStats.mood = e;
-            saveData(); 
-        };
+        window.insertMood = (e) => { document.execCommand('insertText', false, ` ${e} `); currentDayStats.mood = e; saveData(); };
         window.triggerImageUpload = () => document.getElementById('img-input').click();
         window.handleImageUpload = (input) => {
             const file = input.files[0]; if (!file) return;
@@ -521,20 +563,12 @@
             modal.classList.add('open');
         };
 
-        // --- STATS VISUALIZATION (Placeholder per ora) ---
         function renderChart() {
-            // Nota: Le statistiche globali sono più complesse ora che i dati sono divisi.
-            // Per ora mostriamo solo un grafico statico o vuoto per evitare complessità.
-            // In una V11.1 potremmo implementare un contatore globale.
             const ctx = document.getElementById('chartCanvas').getContext('2d');
             if(window.myChart) window.myChart.destroy();
-            // Placeholder data
             window.myChart = new Chart(ctx, { type:'bar', data:{labels:['Oggi'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} });
         }
-        function renderHeatmap() {
-             // Idem per heatmap: richiede lettura di più documenti. Per ora lasciamo vuoto o mostriamo solo oggi.
-             document.getElementById('heatmap-grid').innerHTML = '<div style="color:#aaa; text-align:center; width:100%;">Heatmap disponibile nelle prossime versioni</div>';
-        }
+        function renderHeatmap() { document.getElementById('heatmap-grid').innerHTML = '<div style="color:#aaa; text-align:center; width:100%;">Heatmap globale in arrivo</div>'; }
         function placeCaretAtEnd(el) { el.focus(); if (window.getSelection && document.createRange) { var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }
     </script>
 </body>
