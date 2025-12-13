@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V10.0 Ultimate</title>
+    <title>Diario V10.1 Monitor</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -24,8 +24,16 @@
         /* HEADER */
         header { background: var(--panel); padding: 8px 15px; border-bottom: 2px solid var(--accent); display: flex; flex-direction: column; gap: 5px; }
         .header-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .app-title-container { display: flex; flex-direction: column; }
         .app-title { font-weight: bold; color: var(--accent); display: flex; align-items: baseline; gap: 8px; }
         .version-tag { font-size: 0.7rem; color: #888; font-weight: normal; }
+        
+        /* FILE SIZE INDICATOR */
+        .db-status { font-size: 0.7rem; color: #aaa; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00e676; display: inline-block; }
+        .status-warning { background: #ffea00; }
+        .status-danger { background: #ff1744; animation: pulse-red 1s infinite; }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         /* AI COACH BUBBLE */
         #ai-coach-area { background: rgba(124, 77, 255, 0.1); border-left: 3px solid var(--accent); padding: 10px; margin-bottom: 5px; border-radius: 0 5px 5px 0; font-size: 0.9rem; display: none; animation: slideIn 0.3s ease; }
@@ -81,15 +89,19 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V10.0</h1>
+        <h1 style="color:var(--accent)">Diario V10.1</h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
     <div id="app" style="display:none; flex-direction:column; height:100%;">
         <header>
             <div class="header-top">
-                <div class="app-title">
-                    Diario <span class="version-tag">V10.0 Ultimate</span>
+                <div class="app-title-container">
+                    <div class="app-title">Diario <span class="version-tag">V10.1 Monitor</span></div>
+                    <div class="db-status">
+                        <span id="status-dot" class="status-dot"></span>
+                        <span id="db-size">Calcolo...</span>
+                    </div>
                 </div>
                 <div style="display:flex; gap:5px; align-items:center;">
                     <button class="tool-btn" onclick="openQuestionsHistory()" title="Archivio Domande"><span class="material-icons-round">menu_book</span></button>
@@ -115,9 +127,7 @@
         <div class="toolbar">
             <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
             <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk (Nala Mode)"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
-            
             <div class="separator"></div>
-
             <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
             <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
             <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
@@ -141,46 +151,29 @@
 
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);">
         <div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;">
-            <div style="position:absolute; top:20px; right:20px;">
-                <button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button>
-            </div>
-            
+            <div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div>
             <h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2>
             <div id="walk-status">Pronto a passeggiare?</div>
-            
             <div id="walk-transcript">Premi il microfono per iniziare l'intervista.</div>
-            
-            <button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()">
-                <span class="material-icons-round" style="font-size:3rem;">mic</span>
-            </button>
-            
-            <p style="margin-top:30px; font-size:0.8rem; color:#666;">Ti farò delle domande. Rispondi a voce.</p>
+            <button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button>
         </div>
     </div>
-
     <div id="questions-modal" class="modal">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between;"><h2>Domande Ricorrenti</h2><button onclick="document.getElementById('questions-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div id="questions-list-container"></div>
         </div>
     </div>
-
     <div id="stats-modal" class="modal">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between;"><h2>Statistiche & Insight</h2><button onclick="document.getElementById('stats-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
-            
-            <div style="background:rgba(124, 77, 255, 0.1); padding:15px; border-radius:10px; margin-top:15px; border-left:4px solid var(--accent);">
-                <div style="font-weight:bold; color:var(--accent); margin-bottom:5px;">🧠 AI Insight</div>
-                <div id="insight-text" style="font-size:0.9rem; font-style:italic;">Analisi in corso...</div>
-            </div>
-
+            <div style="background:rgba(124, 77, 255, 0.1); padding:15px; border-radius:10px; margin-top:15px; border-left:4px solid var(--accent);"><div style="font-weight:bold; color:var(--accent); margin-bottom:5px;">🧠 AI Insight</div><div id="insight-text" style="font-size:0.9rem; font-style:italic;">Analisi in corso...</div></div>
             <div style="margin:20px 0 10px 0; font-size:0.9rem; color:#aaa;">Oggi: <span id="count-today" style="color:var(--accent); font-weight:bold;">0</span> parole</div>
             <canvas id="chartCanvas" height="150"></canvas>
             <h3 style="margin-top:20px;">Heatmap</h3>
             <div id="heatmap-grid" style="display:flex; flex-wrap:wrap; gap:3px; justify-content:center;"></div>
         </div>
     </div>
-
     <div id="settings-modal" class="modal">
         <div class="modal-content" style="max-width:300px;">
             <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
@@ -226,6 +219,31 @@
                 loadDiary();
             }
         });
+
+        // --- MONITORAGGIO PESO (Nuova funzione V10.1) ---
+        function checkDbSize(dataObj) {
+            // Calcola la dimensione del JSON in byte
+            const jsonString = JSON.stringify(dataObj);
+            const bytes = new Blob([jsonString]).size;
+            const kb = (bytes / 1024).toFixed(1);
+            
+            const sizeDisplay = document.getElementById('db-size');
+            const dot = document.getElementById('status-dot');
+            
+            sizeDisplay.innerText = `${kb} KB / 1000 KB`;
+            
+            // Logica colori semaforo
+            if (bytes > 900000) { // > 900KB (Critico)
+                dot.className = 'status-dot status-danger';
+                sizeDisplay.style.color = '#ff1744';
+            } else if (bytes > 700000) { // > 700KB (Attenzione)
+                dot.className = 'status-dot status-warning';
+                sizeDisplay.style.color = '#ffea00';
+            } else {
+                dot.className = 'status-dot'; // Verde
+                sizeDisplay.style.color = '#aaa';
+            }
+        }
 
         // --- TAG RULES ---
         const tagRules = {
@@ -294,7 +312,7 @@
             if (rating === 1) { 
                 questionPrefs[currentPromptText] = 1; 
                 document.getElementById('ai-message').innerText = "Salvato nei preferiti! Vuoi inserirlo?";
-                renderBrainstormButtons(true); // Rigenera bottoni senza Like/Dislike ma CON Inserisci
+                renderBrainstormButtons(true); 
             } else { 
                 questionPrefs[currentPromptText] = -1; 
                 showAiMessage("Non te la proporrò più.", "Feedback");
@@ -308,11 +326,11 @@
             document.getElementById('ai-title').innerText = title;
             document.getElementById('ai-message').innerText = msg;
             if(actions) document.getElementById('ai-actions').innerHTML = actions;
-            else if(!document.getElementById('ai-actions').innerHTML) renderBrainstormButtons(); // Default btns se vuoto
+            else if(!document.getElementById('ai-actions').innerHTML) renderBrainstormButtons(); 
             area.style.display = 'block';
         }
 
-        // --- WALK & TALK (NALA MODE) ---
+        // --- WALK & TALK ---
         let walkRecognition = null;
         let isWalkSessionActive = false;
         
@@ -332,27 +350,20 @@
             document.getElementById('walk-status').innerText = "In ascolto...";
             
             walkRecognition = new webkitSpeechRecognition();
-            walkRecognition.continuous = false; // Si ferma dopo ogni frase per elaborare
+            walkRecognition.continuous = false; 
             walkRecognition.lang = 'it-IT';
             
             walkRecognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 document.getElementById('walk-transcript').innerText = transcript;
-                
-                // Scrivi nel diario
                 const editor = document.getElementById('editor');
                 const time = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
                 editor.innerHTML += `<div style="margin-top:10px;"><b>🗣️ Walk (${time}):</b> ${transcript}</div>`;
                 saveData();
-
-                // Risposta vocale
                 speak("Salvato. Altro?");
                 setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 2000);
             };
-
             walkRecognition.onerror = (e) => { console.log(e); stopWalkSession(); };
-            
-            // Inizia con una domanda
             speak("Di cosa vuoi parlare mentre passeggi?");
             setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 3000);
         }
@@ -371,43 +382,37 @@
             window.speechSynthesis.speak(u);
         }
 
-        // --- INSIGHTS ENGINE ---
+        // --- INSIGHTS ---
         function calculateInsights() {
-            // Logica semplice: Umore vs Parole
             let moodCounts = { '😄':{count:0, words:0}, '😐':{count:0, words:0}, '😔':{count:0, words:0} };
-            
             Object.values(currentStats).forEach(day => {
                 if(day.mood && day.words && moodCounts[day.mood]) {
                     moodCounts[day.mood].count++;
                     moodCounts[day.mood].words += day.words;
                 }
             });
-
-            // Trova mood più produttivo
-            let bestMood = null;
-            let maxAvg = 0;
-
+            let bestMood = null; let maxAvg = 0;
             for(const [m, data] of Object.entries(moodCounts)) {
                 if(data.count > 0) {
                     const avg = data.words / data.count;
                     if(avg > maxAvg) { maxAvg = avg; bestMood = m; }
                 }
             }
-
             const el = document.getElementById('insight-text');
-            if (bestMood) {
-                el.innerText = `I dati mostrano che scrivi di più (media ${Math.round(maxAvg)} parole) quando ti senti ${bestMood}. Continua così!`;
-            } else {
-                el.innerText = "Non ho ancora abbastanza dati su Umore e Parole per trovare correlazioni. Usa di più il diario!";
-            }
+            if (bestMood) { el.innerText = `I dati mostrano che scrivi di più (media ${Math.round(maxAvg)} parole) quando ti senti ${bestMood}. Continua così!`; } 
+            else { el.innerText = "Non ho ancora abbastanza dati su Umore e Parole per trovare correlazioni. Usa di più il diario!"; }
         }
 
-        // --- CORE ---
+        // --- CORE & MONITORING ---
         function loadDiary() {
             if(localStorage.getItem('theme') === 'light') document.body.classList.add('light-mode');
             onSnapshot(doc(db, "diario", currentUser.uid), (snap) => {
                 if (snap.exists()) {
                     const data = snap.data();
+                    
+                    // CONTROLLO PESO
+                    checkDbSize(data);
+
                     if (document.getElementById('editor').innerHTML.trim() === "") {
                         document.getElementById('editor').innerHTML = data.htmlContent || "";
                         currentStats = data.stats || {};
@@ -416,9 +421,10 @@
                         if (!sessionInitialized) { insertNewEntryHeader(); sessionInitialized = true; }
                         updateCounts();
                     } else {
+                        // Aggiorna variabili di background
                         questionHistory = data.questionHistory || {};
                         questionPrefs = data.questionPrefs || {};
-                        currentStats = data.stats || {}; // Aggiorna stats per insights
+                        currentStats = data.stats || {};
                     }
                 } else { if (!sessionInitialized) { insertNewEntryHeader(); sessionInitialized = true; } }
             });
@@ -441,7 +447,13 @@
             const words = updateCounts();
             if (!currentStats[todayKey]) currentStats[todayKey] = {};
             currentStats[todayKey].words = words; 
-            await setDoc(doc(db, "diario", currentUser.uid), { htmlContent: content, stats: currentStats, questionHistory: questionHistory, questionPrefs: questionPrefs, lastUpdate: new Date() }, { merge: true });
+            
+            const dataToSave = { htmlContent: content, stats: currentStats, questionHistory: questionHistory, questionPrefs: questionPrefs, lastUpdate: new Date() };
+            
+            // AGGIORNA IL CONTATORE PESO
+            checkDbSize(dataToSave);
+
+            await setDoc(doc(db, "diario", currentUser.uid), dataToSave, { merge: true });
         }
         function updateCounts() {
             const text = document.getElementById('editor').innerText;
@@ -456,7 +468,6 @@
         window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
         window.insertMood = (e) => { 
             document.execCommand('insertText', false, ` ${e} `); 
-            // Salva mood per insights
             const k = new Date().toISOString().split('T')[0];
             if(!currentStats[k]) currentStats[k]={}; currentStats[k].mood=e;
             saveData(); 
