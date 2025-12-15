@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V12.2 Fix</title>
+    <title>Diario V12.3 Debug</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -31,7 +31,7 @@
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
         body.light-mode input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
 
-        .db-status { font-size: 0.6rem; color: #aaa; margin-left: 5px; }
+        .db-status { font-size: 0.6rem; color: #aaa; margin-left: 5px; font-weight: bold; }
 
         /* AI COACH BUBBLE */
         #ai-coach-area { background: rgba(124, 77, 255, 0.1); border-left: 3px solid var(--accent); padding: 10px; margin-bottom: 5px; border-radius: 0 5px 5px 0; font-size: 0.9rem; display: none; animation: slideIn 0.3s ease; }
@@ -53,7 +53,6 @@
         #editor { min-height: 100%; padding: 20px; outline: none; line-height: 1.6; font-size: 17px; padding-bottom: 150px; white-space: pre-wrap; }
         .auto-tag { font-size: 0.65rem; color: var(--accent); background: var(--tag-bg); padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-right: 8px; font-weight: bold; display: inline-block; user-select: none; border: 1px solid rgba(124, 77, 255, 0.2); }
         #editor img { max-width: 100%; border-radius: 8px; margin: 10px 0; display: block; }
-        .search-hit { background-color: rgba(255, 235, 59, 0.4); border-bottom: 2px solid #ffeb3b; }
 
         /* MOOD BAR */
         .mood-bar { display: flex; gap: 5px; padding: 0 10px; border-left: 1px solid #444; margin-left: 5px; }
@@ -94,7 +93,7 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V12.2</h1>
+        <h1 style="color:var(--accent)">Diario V12.3</h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
@@ -103,7 +102,7 @@
             <div class="header-top">
                 <div class="date-navigator">
                     <input type="date" id="date-picker" onchange="changeDate(this.value)">
-                    <span id="db-status" class="db-status">Sync...</span>
+                    <span id="db-status" class="db-status">Ready</span>
                 </div>
                 
                 <div style="display:flex; gap:5px; align-items:center;">
@@ -156,8 +155,7 @@
                 <h2>Riassunto AI 🤖</h2>
                 <button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
             </div>
-            <div id="ai-summary-content">
-                </div>
+            <div id="ai-summary-content"></div>
         </div>
     </div>
 
@@ -219,6 +217,7 @@
         import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+        // CONFIGURAZIONE ORIGINALE UTENTE
         const firebaseConfig = {
             apiKey: "AIzaSyCYndAl9MKtZDTK5ivbtmaqDa-r6vEe6SM",
             authDomain: "diario-app-fc5fe.firebaseapp.com",
@@ -258,13 +257,12 @@
             }
         });
 
-        // --- GEMINI AI INTEGRATION (FIXED) ---
-        
+        // --- GEMINI AI INTEGRATION (PRO VERSION) ---
         window.saveApiKey = () => {
             const key = document.getElementById('gemini-api-key').value.trim();
             if(key) {
                 localStorage.setItem('GEMINI_API_KEY', key);
-                alert("Chiave salvata! Ora puoi usare la magia ✨");
+                alert("Chiave salvata!");
                 document.getElementById('settings-modal').classList.remove('open');
             }
         };
@@ -278,8 +276,8 @@
             }
 
             const text = document.getElementById('editor').innerText.trim();
-            if (text.length < 50) {
-                alert("Scrivi almeno un po' di più prima di chiedere un riassunto!");
+            if (text.length < 30) {
+                alert("Scrivi di più prima di chiedere un riassunto!");
                 return;
             }
 
@@ -287,47 +285,26 @@
             const contentDiv = document.getElementById('ai-summary-content');
             contentDiv.innerHTML = '<div class="ai-loading">Analizzo la tua giornata... 🧠</div>';
 
-            const prompt = `
-                Sei un assistente personale empatico e saggio. Analizza questa pagina di diario.
-                
-                Fai queste 3 cose:
-                1. **Riassunto:** In 3 punti elenco, riassumi cosa è successo oggi.
-                2. **Insight:** Trova un pattern o un collegamento interessante tra i pensieri (es. "Noti come ti senti meglio quando...").
-                3. **Consiglio:** Dai un piccolo consiglio pratico basato su ciò che è stato scritto.
-
-                Testo del diario:
-                "${text}"
-            `;
+            const prompt = `Sei un assistente personale saggio. Analizza questo diario:\n"${text}"\n\n1. Riassumi i fatti.\n2. Trova un pattern emotivo.\n3. Dai un consiglio pratico.`;
 
             try {
-                // Modello aggiornato a gemini-pro (stabile)
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }]
-                    })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
 
                 const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error.message);
-                }
+                if (data.error) throw new Error(data.error.message);
 
                 const aiText = data.candidates[0].content.parts[0].text;
-                // Usa 'marked' per trasformare il markdown di Gemini in HTML carino
                 contentDiv.innerHTML = marked.parse(aiText);
 
             } catch (error) {
-                console.error(error);
-                contentDiv.innerHTML = `<div style="color:red; text-align:center;">Errore AI: Non riesco a contattare Gemini. Controlla la tua API Key e riprova.</div>`;
+                contentDiv.innerHTML = `<div style="color:red; text-align:center;">Errore AI: ${error.message}</div>`;
             }
         };
 
-
-        // --- SISTEMA DATE & SALVATAGGIO SCALABILE ---
-        
+        // --- SISTEMA DATE & SALVATAGGIO (DEBUG EDITION) ---
         window.changeDate = (newDate) => { currentDateString = newDate; loadDiaryForDate(newDate); };
 
         async function loadDiaryForDate(dateStr) {
@@ -344,31 +321,50 @@
                     currentTags = data.tags || [];
                     updateCounts();
                     document.getElementById('db-status').innerText = "Sync OK";
+                    document.getElementById('db-status').style.color = "#00e676";
                 } else {
                     document.getElementById('editor').innerHTML = ""; 
                     currentDayStats = {};
                     currentTags = [];
-                    document.getElementById('db-status').innerText = "Nuovo Giorno";
+                    document.getElementById('db-status').innerText = "New Day";
+                    document.getElementById('db-status').style.color = "#aaa";
                 }
             });
         }
 
         async function saveData() {
             if (!currentUser) return;
-            document.getElementById('db-status').innerText = "Saving...";
-            const content = document.getElementById('editor').innerHTML;
-            const words = updateCounts();
-            const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
-            const dataToSave = {
-                htmlContent: content,
-                stats: { words: words, mood: currentDayStats.mood }, 
-                tags: detectedTags,
-                questionHistory: questionHistory,
-                questionPrefs: questionPrefs,
-                lastUpdate: new Date()
-            };
-            await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
-            document.getElementById('db-status').innerText = "Saved";
+            
+            const statusLabel = document.getElementById('db-status');
+            statusLabel.innerText = "Saving...";
+            statusLabel.style.color = "orange";
+
+            try {
+                const content = document.getElementById('editor').innerHTML;
+                const words = updateCounts();
+                const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
+
+                const dataToSave = {
+                    htmlContent: content,
+                    stats: { words: words, mood: currentDayStats.mood || "" }, 
+                    tags: detectedTags,
+                    questionHistory: questionHistory,
+                    questionPrefs: questionPrefs,
+                    lastUpdate: new Date()
+                };
+
+                // Salvataggio nel percorso scalabile: diario/USER_ID/entries/DATA
+                await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
+
+                statusLabel.innerText = "Saved";
+                statusLabel.style.color = "#00e676";
+            } catch (error) {
+                console.error("ERRORE SALVATAGGIO:", error);
+                statusLabel.innerText = "ERROR";
+                statusLabel.style.color = "red";
+                // POPUP DI ERRORE PER DIAGNOSTICA
+                alert("ERRORE SALVATAGGIO!\n" + error.code + "\n" + error.message);
+            }
         }
 
         // --- TAG EXPLORER ---
@@ -401,7 +397,7 @@
             const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
             const querySnapshot = await getDocs(q);
             resultsDiv.innerHTML = '';
-            if (querySnapshot.empty) { resultsDiv.innerHTML = `<div style="text-align:center;">Nessun giorno trovato con #${tagName}</div>`; return; }
+            if (querySnapshot.empty) { resultsDiv.innerHTML = `<div style="text-align:center;">Nessun giorno trovato.</div>`; return; }
             querySnapshot.forEach((doc) => {
                 const dayData = doc.data();
                 const dayId = doc.id;
@@ -489,10 +485,8 @@
 
         let walkRecognition = null;
         let isWalkSessionActive = false;
-        
         window.openWalkTalk = () => { document.getElementById('walk-talk-modal').classList.add('open'); };
         window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
-
         window.toggleWalkSession = () => { if(isWalkSessionActive) stopWalkSession(); else startWalkSession(); };
 
         function startWalkSession() {
@@ -569,7 +563,6 @@
             window.myChart = new Chart(ctx, { type:'bar', data:{labels:['Oggi'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} });
         }
         function renderHeatmap() { document.getElementById('heatmap-grid').innerHTML = '<div style="color:#aaa; text-align:center; width:100%;">Heatmap globale in arrivo</div>'; }
-        function placeCaretAtEnd(el) { el.focus(); if (window.getSelection && document.createRange) { var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }
     </script>
 </body>
 </html>
