@@ -1,10 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// NUOVA IMPORTAZIONE DIRETTA DELLA SDK GENAI
+import { GoogleGenAI } from "https://unpkg.com/@google/genai@0.1.0/dist/index.js";
 
-// Importiamo la classe GenAI globalmente per usarla dopo il caricamento della chiave
-let GenAI = window.GenAI;
-const aiConfig = { apiKey: null }; 
+// VARIABILE per l'istanza AI
+let aiInstance = null;
 
 // CONFIGURAZIONE FIREBASE
 const firebaseConfig = {
@@ -49,7 +50,7 @@ onAuthStateChanged(auth, async (user) => {
         const savedKey = localStorage.getItem('GEMINI_API_KEY');
         if(savedKey) {
             document.getElementById('gemini-api-key').value = savedKey;
-            aiConfig.apiKey = savedKey; // Inizializza la chiave AI
+            initializeAi(savedKey); // Inizializza l'AI al login
         }
 
         // Caricamento dati
@@ -96,18 +97,25 @@ function updateMetrics(content, wordsToday) {
 }
 
 // --- GEMINI AI INTEGRATION ---
+
+// Funzione di inizializzazione AI
+function initializeAi(apiKey) {
+    // Inizializza l'istanza GenAI
+    aiInstance = new GoogleGenAI({ apiKey: apiKey });
+}
+
 window.saveApiKey = () => {
     const key = document.getElementById('gemini-api-key').value.trim();
     if(key) { 
         localStorage.setItem('GEMINI_API_KEY', key); 
-        aiConfig.apiKey = key; // Aggiorna la configurazione
+        initializeAi(key); // Inizializza l'AI dopo aver salvato
         alert("Chiave salvata e AI Service aggiornato!"); 
         document.getElementById('settings-modal').classList.remove('open'); 
     }
 };
 
 window.generateAiSummary = async () => {
-    if (!aiConfig.apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
+    if (!aiInstance) { alert("Inserisci API Key nelle Impostazioni"); return; }
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
 
@@ -118,9 +126,7 @@ window.generateAiSummary = async () => {
     const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
 
     try {
-        // Usa la SDK di Gemini
-        const ai = new GenAI(aiConfig.apiKey);
-        const response = await ai.models.generateContent({
+        const response = await aiInstance.models.generateContent({
             model: 'gemini-pro',
             contents: prompt,
         });
@@ -129,7 +135,8 @@ window.generateAiSummary = async () => {
         contentDiv.innerHTML = marked.parse(aiText);
     } catch (error) { 
         console.error("Errore Gemini SDK:", error);
-        contentDiv.innerHTML = "Errore AI. Controlla la chiave e la console."; 
+        // Messaggio di errore più specifico per l'utente
+        contentDiv.innerHTML = "Errore AI. La chiave API è scaduta o non è valida."; 
     }
 };
 
