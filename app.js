@@ -2,6 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+// Importiamo la classe GenAI globalmente per usarla dopo il caricamento della chiave
+let GenAI = window.GenAI;
+const aiConfig = { apiKey: null }; 
+
 // CONFIGURAZIONE FIREBASE
 const firebaseConfig = {
     apiKey: "AIzaSyCYndAl9MKtZDTK5ivbtmaqDa-r6vEe6SM",
@@ -43,7 +47,10 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('date-picker').value = currentDateString;
         
         const savedKey = localStorage.getItem('GEMINI_API_KEY');
-        if(savedKey) document.getElementById('gemini-api-key').value = savedKey;
+        if(savedKey) {
+            document.getElementById('gemini-api-key').value = savedKey;
+            aiConfig.apiKey = savedKey; // Inizializza la chiave AI
+        }
 
         // Caricamento dati
         await loadGlobalStats();
@@ -91,29 +98,39 @@ function updateMetrics(content, wordsToday) {
 // --- GEMINI AI INTEGRATION ---
 window.saveApiKey = () => {
     const key = document.getElementById('gemini-api-key').value.trim();
-    if(key) { localStorage.setItem('GEMINI_API_KEY', key); alert("Chiave salvata!"); document.getElementById('settings-modal').classList.remove('open'); }
+    if(key) { 
+        localStorage.setItem('GEMINI_API_KEY', key); 
+        aiConfig.apiKey = key; // Aggiorna la configurazione
+        alert("Chiave salvata e AI Service aggiornato!"); 
+        document.getElementById('settings-modal').classList.remove('open'); 
+    }
 };
 
 window.generateAiSummary = async () => {
-    const apiKey = localStorage.getItem('GEMINI_API_KEY');
-    if (!apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
+    if (!aiConfig.apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
 
     document.getElementById('summary-modal').classList.add('open');
     const contentDiv = document.getElementById('ai-summary-content');
     contentDiv.innerHTML = '<div class="ai-loading">Analizzo... 🧠</div>';
-    const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio.`;
+    
+    const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        // Usa la SDK di Gemini
+        const ai = new GenAI(aiConfig.apiKey);
+        const response = await ai.models.generateContent({
+            model: 'gemini-pro',
+            contents: prompt,
         });
-        const data = await response.json();
-        const aiText = data.candidates[0].content.parts[0].text;
+
+        const aiText = response.text;
         contentDiv.innerHTML = marked.parse(aiText);
-    } catch (error) { contentDiv.innerHTML = "Errore AI."; }
+    } catch (error) { 
+        console.error("Errore Gemini SDK:", error);
+        contentDiv.innerHTML = "Errore AI. Controlla la chiave e la console."; 
+    }
 };
 
 // --- CORE FUNCTIONS ---
