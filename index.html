@@ -7,102 +7,189 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
-    
+
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
 
+<body>
+    <!-- LOGIN SCREEN -->
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V13.0</h1>
-        <button class="btn-primary" onclick="login()">Accedi con Google</button>
+        <div class="login-card">
+            <h1>📓 Diario Intelligente</h1>
+            <p>Accedi con Google per continuare</p>
+            <button onclick="login()" class="login-btn">
+                <span class="material-icons-round">login</span> Login con Google
+            </button>
+        </div>
     </div>
 
-    <div id="app" style="display:none; flex-direction:column; height:100%;">
+    <!-- APP MAIN -->
+    <div id="app" style="display:none;">
         <header>
-            <div class="header-top">
-                <div class="date-navigator">
-                    <input type="date" id="date-picker" onchange="changeDate(this.value)">
-                    <span id="db-status" class="db-status">Ready</span>
-                </div>
-                
-                <div style="display:flex; gap:5px; align-items:center;">
-                    <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
-                    <button class="tool-btn" onclick="openQuestionsHistory()" title="Archivio Domande"><span class="material-icons-round">menu_book</span></button>
-                    <button class="tool-btn" onclick="openStats()" title="Stats"><span class="material-icons-round">bar_chart</span></button>
-                    <button class="tool-btn" onclick="openSettings()" title="Settings"><span class="material-icons-round">settings</span></button>
-                    <img id="user-pic" src="" style="width:28px; height:28px; border-radius:50%; border:2px solid var(--accent); margin-left:5px;">
+            <div class="left-header">
+                <img id="user-pic" src="" alt="User" />
+                <div class="header-info">
+                    <div class="header-title">📓 Diario</div>
+                    <div class="header-sub">
+                        <span id="db-status">Loading...</span> ·
+                        <span id="session-timer">00:00</span>
+                    </div>
                 </div>
             </div>
-            
-            <div id="ai-coach-area">
-                <div class="ai-title" id="ai-title">Coach</div>
-                <div id="ai-message"></div>
-                <div class="ai-actions" id="ai-actions"></div>
+
+            <div class="right-header">
+                <input type="date" id="date-picker" onchange="changeDate(this.value)">
+                <button class="icon-btn" onclick="openSettings()"><span class="material-icons-round">settings</span></button>
             </div>
         </header>
 
+        <!-- DASHBOARD -->
+        <div class="dashboard">
+            <div class="metric">
+                <div class="metric-label">📌 Oggi</div>
+                <div class="metric-value"><span id="count-today">0</span> parole</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">📈 Totale</div>
+                <div class="metric-value"><span id="count-global">0</span> parole</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">⚖️ Peso Pagina</div>
+                <div class="metric-value"><span id="file-weight">0 KB</span></div>
+            </div>
+        </div>
+
+        <!-- TOOLBAR -->
         <div class="toolbar">
-            <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
-            <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
-            <button class="tool-btn" onclick="generateAiSummary()" title="Riassunto AI"><span class="material-icons-round" style="color:#29b6f6;">auto_awesome</span></button>
-            
-            <div class="separator"></div>
-            
-            <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
-            <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
-            <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
-            <button class="tool-btn" id="mic-btn" onclick="toggleDictation()"><span class="material-icons-round">mic</span></button>
-            
-            <div class="mood-bar">
-                <button class="mood-btn" onclick="insertMood('😄')">😄</button>
-                <button class="mood-btn" onclick="insertMood('😐')">😐</button>
-                <button class="mood-btn" onclick="insertMood('😔')">😔</button>
-                <button class="mood-btn" onclick="insertMood('😡')">😡</button>
-                <button class="mood-btn" onclick="insertMood('💡')">💡</button>
-            </div>
-        </div>
-        
-        <div id="metrics-bar">
-            <div class="metric-item" title="Tempo sessione attuale">
-                <span>⏱️</span> <span id="session-timer" class="metric-val">00:00</span>
-            </div>
-            <div class="metric-item" title="Parole scritte oggi">
-                <span>📝 Oggi:</span> <span id="count-today" class="metric-val">0</span>
-            </div>
-            <div class="metric-item" title="Parole totali nel diario">
-                <span>📚 Totale:</span> <span id="count-global" class="metric-val">Loading...</span>
-            </div>
-            <div class="metric-item" title="Peso del file attuale (max 1000KB)">
-                <span>💾</span> <span id="file-weight" class="metric-val">0 KB</span>
-            </div>
+            <button class="toolbar-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
+            <button class="toolbar-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
+            <button class="toolbar-btn" onclick="triggerImageUpload()"><span class="material-icons-round">image</span></button>
+
+            <button class="toolbar-btn mood" onclick="insertMood('😊')">😊</button>
+            <button class="toolbar-btn mood" onclick="insertMood('😐')">😐</button>
+            <button class="toolbar-btn mood" onclick="insertMood('😢')">😢</button>
+
+            <button class="toolbar-btn" onclick="toggleDictation()" id="mic-btn"><span class="material-icons-round">mic</span></button>
+            <button class="toolbar-btn" onclick="triggerBrainstorm()"><span class="material-icons-round">lightbulb</span></button>
+            <button class="toolbar-btn" onclick="generateAiSummary()"><span class="material-icons-round">auto_awesome</span></button>
         </div>
 
-        <input type="file" id="img-input" accept="image/*" onchange="handleImageUpload(this)">
+        <!-- EDITOR -->
+        <div id="editor" contenteditable="true" onkeyup="handleKeyUp(event)"></div>
+        <input type="file" id="img-input" style="display:none" accept="image/*" onchange="handleImageUpload(this)">
 
-        <main>
-            <div id="editor" contenteditable="true" onkeyup="handleKeyUp(event)"></div>
-        </main>
+        <!-- BOTTOM NAV -->
+        <div class="bottom-nav">
+            <button class="nav-btn" onclick="openTagExplorer()"><span class="material-icons-round">local_offer</span> Tag</button>
+            <button class="nav-btn" onclick="openQuestionsHistory()"><span class="material-icons-round">history</span> Domande</button>
+            <button class="nav-btn" onclick="openWalkTalk()"><span class="material-icons-round">directions_walk</span> Walk</button>
+            <button class="nav-btn" onclick="openStats()"><span class="material-icons-round">bar_chart</span> Stats</button>
+        </div>
     </div>
 
-    <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
-    <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
-    <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
-    <div id="questions-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Domande</h2><button onclick="document.getElementById('questions-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="questions-list-container"></div></div></div>
-    <div id="stats-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Statistiche</h2><button onclick="document.getElementById('stats-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="margin:20px 0;">Parole Oggi: <span id="stat-count-today" style="color:var(--accent); font-weight:bold;">0</span></div><canvas id="chartCanvas" height="150"></canvas></div></div>
+    <!-- MODAL AI COACH -->
+    <div id="ai-coach-area" style="display:none;">
+        <div class="ai-coach">
+            <div class="ai-header">
+                <span id="ai-title">AI Coach</span>
+                <button onclick="document.getElementById('ai-coach-area').style.display='none'">✖</button>
+            </div>
+            <div id="ai-message"></div>
+            <div id="ai-actions"></div>
+        </div>
+    </div>
 
+    <!-- MODAL SUMMARY -->
+    <div id="summary-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🤖 Riassunto AI</h2>
+                <button onclick="document.getElementById('summary-modal').classList.remove('open')">&times;</button>
+            </div>
+            <div id="ai-summary-content"></div>
+        </div>
+    </div>
+
+    <!-- MODAL TAG -->
+    <div id="tag-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏷️ Esplora per Tag</h2>
+                <button onclick="document.getElementById('tag-modal').classList.remove('open')">&times;</button>
+            </div>
+            <div id="tag-cloud"></div>
+            <div id="tag-results"></div>
+        </div>
+    </div>
+
+    <!-- MODAL QUESTIONS -->
+    <div id="questions-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🧠 Domande & Risposte</h2>
+                <button onclick="document.getElementById('questions-modal').classList.remove('open')">&times;</button>
+            </div>
+            <div id="questions-list-container"></div>
+        </div>
+    </div>
+
+    <!-- MODAL WALK & TALK -->
+    <div id="walk-talk-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🚶 Walk & Talk</h2>
+                <button onclick="closeWalkTalk()">&times;</button>
+            </div>
+            <p>Detta un pensiero veloce e inseriscilo nel diario.</p>
+            <button id="walk-mic-btn" onclick="toggleWalkSession()">🎙️ Start/Stop</button>
+            <div id="walk-status">Stop</div>
+            <div id="walk-transcript"></div>
+        </div>
+    </div>
+
+    <!-- MODAL STATS -->
+    <div id="stats-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Statistiche</h2>
+                <button onclick="document.getElementById('stats-modal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="stats-row">
+                <div class="stat-box">
+                    <div class="stat-label">Parole Oggi</div>
+                    <div class="stat-value" id="stat-count-today">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Tempo Sessione</div>
+                    <div class="stat-value" id="stat-session-time">--</div>
+                </div>
+            </div>
+            <canvas id="chartCanvas"></canvas>
+        </div>
+    </div>
+
+    <!-- MODAL SETTINGS -->
     <div id="settings-modal" class="modal">
         <div class="modal-content" style="max-width:300px;">
-            <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
-            <div style="margin-top:20px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
-            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>⚙️ Impostazioni</h2>
+                <button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
+            </div>
+            <div style="margin-top:20px;">
+                <button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button>
+            </div>
+            <div style="margin-top:10px;">
+                <button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button>
+            </div>
             <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
             <h3>🤖 Google Gemini AI</h3>
-            <input type="password" id="gemini-api-key" placeholder="Incolla AIzaSy..." style="width:100%; padding:10px; margin-top:5px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:5px;">
-            <button style="width:100%; padding:10px; margin-top:10px; background:var(--accent); color:white; border:none; border-radius:5px;" onclick="saveApiKey()">Salva Chiave</button>
+            <input type="password" id="gemini-api-key" placeholder="Incolla qui la tua API key"
+                   style="width:100%; padding:10px; background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:5px;">
+            <button style="width:100%; padding:10px; margin-top:10px;" onclick="saveApiKey()">Salva Chiave</button>
         </div>
     </div>
 
