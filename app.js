@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-// IMPORT SDK GENAI (aggiornata)
+// IMPORT SDK GENAI
 import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@1.33.0/dist/web/index.mjs";
 
 // VARIABILE per l'istanza AI
@@ -22,20 +22,53 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
+// DEFAULT PROMPTS (Le 30 domande iniziali)
+const defaultPrompts = [
+    "Qual è stata la cosa migliore che ti è successa oggi?",
+    "Scrivi 3 cose, anche piccole, per cui sei grato in questo momento.",
+    "C'è stato un momento oggi in cui ti sei sentito veramente in pace?",
+    "Cosa ti ha fatto sorridere oggi?",
+    "Qual è la lezione più importante che hai imparato oggi?",
+    "Chi ha reso la tua giornata migliore e perché?",
+    "Come ti sei preso cura di te stesso oggi?",
+    "Qual è l'obiettivo principale che vuoi raggiungere domani?",
+    "C'è qualcosa che stai rimandando? Perché?",
+    "Se potessi rifare la giornata di oggi, cosa cambieresti?",
+    "Quale piccola azione puoi fare ora per migliorare la tua settimana?",
+    "Cosa ti ha fatto perdere tempo oggi?",
+    "Hai fatto un passo avanti verso i tuoi sogni oggi? Quale?",
+    "Come valuti la tua energia oggi da 1 a 10 e perché?",
+    "Quale emozione ha prevalso oggi?",
+    "C'è qualcosa che ti preoccupa? Scrivilo per toglierlo dalla testa.",
+    "C'è una conversazione che avresti voluto affrontare diversamente?",
+    "Cosa ti sta togliendo energia in questo periodo?",
+    "Cosa faresti se non avessi paura di fallire?",
+    "C'è un pensiero ricorrente che ti sta disturbando?",
+    "Scrivi una lettera al te stesso di 5 anni fa.",
+    "C'è qualcosa che devi 'lasciar andare' prima di dormire?",
+    "Se la tua giornata fosse un film, che titolo avrebbe?",
+    "Descrivi la giornata di oggi usando solo 3 parole.",
+    "Se potessi essere ovunque nel mondo ora, dove saresti?",
+    "Qual è l'idea più strana che ti è venuta in mente oggi?",
+    "Scrivi la prima frase del libro della tua vita.",
+    "Come ti immagini tra un anno esatto?",
+    "Qual è la cosa che aspetti con più ansia nel prossimo futuro?",
+    "Scrivi un messaggio di incoraggiamento per il te stesso di domani mattina."
+];
+
 // VARIABILI GLOBALI
 let currentUser = null;
 let currentDateString = new Date().toISOString().split('T')[0]; 
 let currentDayStats = {};
 let questionHistory = {}; 
-let questionPrefs = {}; 
 let currentTags = [];
 let globalWordCount = 0; 
 let sessionStartTime = Date.now();
+let currentPrompts = []; // Array in memoria per le domande
 
 // SERVICE WORKER & LOGIN
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
-// Esportiamo la funzione login globalmente per il pulsante HTML
 window.login = () => signInWithPopup(auth, provider);
 
 // GESTIONE STATO UTENTE
@@ -53,14 +86,123 @@ onAuthStateChanged(auth, async (user) => {
             initializeAi(savedKey); 
         }
 
-        // Caricamento dati
-        loadGlobalStats(); // Ora usa onSnapshot per la reattività
+        loadGlobalStats(); 
         loadDiaryForDate(currentDateString);
         startSessionTimer();
+        
+        // Carica le domande del Coach
+        loadCoachPrompts();
     }
 });
 
-// --- DASHBOARD FUNCTIONS ---
+// --- COACH MANAGER LOGIC (NUOVA SEZIONE) ---
+
+// Carica le domande da Firestore (o inizializza con default)
+async function loadCoachPrompts() {
+    if (!currentUser) return;
+    try {
+        const docRef = doc(db, "diario", currentUser.uid, "settings", "coach");
+        const snap = await getDoc(docRef);
+        
+        if (snap.exists() && snap.data().prompts && snap.data().prompts.length > 0) {
+            currentPrompts = snap.data().prompts;
+        } else {
+            // Se non esistono, salva quelle di default
+            currentPrompts = [...defaultPrompts];
+            await setDoc(docRef, { prompts: currentPrompts }, { merge: true });
+        }
+        console.log("Coach prompts loaded:", currentPrompts.length);
+    } catch (e) {
+        console.error("Errore caricamento prompts:", e);
+        currentPrompts = [...defaultPrompts]; // Fallback
+    }
+}
+
+// Salva array corrente su DB
+async function savePromptsToDb() {
+    if (!currentUser) return;
+    try {
+        await setDoc(doc(db, "diario", currentUser.uid, "settings", "coach"), { 
+            prompts: currentPrompts 
+        }, { merge: true });
+        renderCoachList(); // Aggiorna UI
+    } catch (e) {
+        alert("Errore salvataggio modifiche Coach: " + e.message);
+    }
+}
+
+window.openCoachManager = () => {
+    document.getElementById('coach-manager-modal').classList.add('open');
+    renderCoachList();
+};
+
+function renderCoachList() {
+    const listContainer = document.getElementById('coach-list-container');
+    listContainer.innerHTML = '';
+    
+    currentPrompts.forEach((prompt, index) => {
+        const div = document.createElement('div');
+        div.className = 'coach-item';
+        div.innerHTML = `
+            <div class="coach-text">${prompt}</div>
+            <div class="coach-btn-group">
+                <button class="coach-action-btn" onclick="editCoachPrompt(${index})" title="Modifica">✏️</button>
+                <button class="coach-action-btn coach-delete" onclick="deleteCoachPrompt(${index})" title="Elimina">🗑️</button>
+            </div>
+        `;
+        listContainer.appendChild(div);
+    });
+}
+
+window.addCoachPrompt = () => {
+    const input = document.getElementById('new-prompt-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    currentPrompts.unshift(text); // Aggiunge all'inizio
+    input.value = '';
+    savePromptsToDb();
+};
+
+window.deleteCoachPrompt = (index) => {
+    if (confirm("Vuoi davvero eliminare questa domanda?")) {
+        currentPrompts.splice(index, 1);
+        savePromptsToDb();
+    }
+};
+
+window.editCoachPrompt = (index) => {
+    const newText = prompt("Modifica la domanda:", currentPrompts[index]);
+    if (newText !== null && newText.trim() !== "") {
+        currentPrompts[index] = newText.trim();
+        savePromptsToDb();
+    }
+};
+
+// Funzione Brainstorm aggiornata per usare l'array dinamico
+window.triggerBrainstorm = () => { 
+    if (currentPrompts.length === 0) {
+        alert("Nessuna domanda disponibile nel Coach. Aggiungine qualcuna dal menu!");
+        return;
+    }
+    const p = currentPrompts[Math.floor(Math.random() * currentPrompts.length)];
+    
+    document.getElementById('ai-title').innerText = "Coach";
+    document.getElementById('ai-message').innerText = p;
+    // Encoding sicuro per passare la stringa alla funzione JS
+    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt(decodeURIComponent('${encodeURIComponent(p)}'))">Inserisci</button>`;
+    document.getElementById('ai-coach-area').style.display = 'block';
+};
+
+window.insertPrompt = (text) => {
+    document.getElementById('editor').focus();
+    document.execCommand('insertText', false, `\n\n**Domanda:** ${text}\n**Risposta:** `);
+    document.getElementById('ai-coach-area').style.display = 'none';
+    saveData();
+};
+
+// --- ALTRE FUNZIONI (CORE) ---
+
 function startSessionTimer() {
     sessionStartTime = Date.now();
     setInterval(() => {
@@ -71,20 +213,17 @@ function startSessionTimer() {
     }, 1000);
 }
 
-// **CORREZIONE BUG CONTEGGIO PAROLE: Uso di onSnapshot per la reattività**
 function loadGlobalStats() {
     const docRef = doc(db, "diario", currentUser.uid, "stats", "global");
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             globalWordCount = snap.data().totalWords || 0;
         } else {
-            // Se non esiste, lo impostiamo a 0. Sarà creato al primo salvataggio.
             globalWordCount = 0; 
         }
         document.getElementById('count-global').innerText = globalWordCount;
     }, (error) => {
         console.error("Errore onSnapshot global stats:", error);
-        document.getElementById('count-global').innerText = "Errore!";
     });
 }
 
@@ -92,7 +231,6 @@ function updateMetrics(content, wordsToday) {
     document.getElementById('count-today').innerText = wordsToday;
     document.getElementById('stat-count-today').innerText = wordsToday;
 
-    // Peso file (approx)
     const size = new Blob([content]).size;
     const kb = (size / 1024).toFixed(1);
     const weightEl = document.getElementById('file-weight');
@@ -102,7 +240,6 @@ function updateMetrics(content, wordsToday) {
     else { weightEl.classList.remove('metric-danger'); }
 }
 
-// --- GEMINI AI INTEGRATION ---
 function initializeAi(apiKey) {
     aiInstance = new GoogleGenAI({ apiKey: apiKey });
 }
@@ -142,27 +279,6 @@ window.generateAiSummary = async () => {
     }
 };
 
-// **CORREZIONE BUG BRAINSTORMING: Re-implementazione della logica**
-window.triggerBrainstorm = () => { 
-    const prompts = ["Cosa ha reso oggi speciale?", "Cosa ti preoccupa di più in questo momento?", "C'è qualcosa per cui sei grato oggi?", "Qual è l'obiettivo più importante per domani?"];
-    const p = prompts[Math.floor(Math.random()*prompts.length)];
-    document.getElementById('ai-title').innerText = "Coach";
-    document.getElementById('ai-message').innerText = p;
-    // Usiamo encodeURIComponent per gestire gli apici nel prompt in HTML
-    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt(decodeURIComponent('${encodeURIComponent(p)}'))">Inserisci</button>`;
-    document.getElementById('ai-coach-area').style.display = 'block';
-};
-
-window.insertPrompt = (text) => {
-    document.getElementById('editor').focus();
-    // Aggiungiamo un doppio a capo per formattazione
-    document.execCommand('insertText', false, `\n\n**Domanda:** ${text}\n**Risposta:** `);
-    document.getElementById('ai-coach-area').style.display = 'none';
-    saveData();
-};
-
-
-// --- CORE FUNCTIONS ---
 window.changeDate = (newDate) => { currentDateString = newDate; loadDiaryForDate(newDate); };
 
 async function loadDiaryForDate(dateStr) {
@@ -215,17 +331,14 @@ async function saveData() {
 
         await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
 
-        // **LOGICA AGGIORNATA PER CONTEGGIO GLOBALE**
-        // Gestisce l'incremento/decremento reattivamente
         if (deltaWords !== 0 || globalWordCount === 0) { 
             let newGlobalCount = globalWordCount + deltaWords;
-            if (newGlobalCount < 0) newGlobalCount = 0; // Prevenire negativi
+            if (newGlobalCount < 0) newGlobalCount = 0; 
             
             await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), {
                 totalWords: newGlobalCount,
                 lastUpdate: new Date()
             }, { merge: true });
-            // Non aggiorniamo globalWordCount qui, lo farà onSnapshot!
         }
 
         statusLabel.innerText = "Saved";
@@ -240,7 +353,6 @@ async function saveData() {
     }
 }
 
-// --- UTILS & TAGS ---
 const tagRules = {
     'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici', 'relazione'],
     'Salute': ['cibo', 'dieta', 'fumo', 'allenamento', 'sonno', 'salute'],
@@ -285,7 +397,6 @@ function processLastBlock() {
 }
 function analyzeTextForTag(text) { const lower = text.toLowerCase(); for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) return tag; } return null; }
 
-
 let walkRecognition = null; let isWalkSessionActive = false;
 window.openWalkTalk = () => document.getElementById('walk-talk-modal').classList.add('open');
 window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
@@ -311,7 +422,6 @@ document.getElementById('editor').addEventListener('paste', (e) => { e.preventDe
 
 function updateCounts() {
     const text = document.getElementById('editor').innerText;
-    // La regex `/\s+/` divide correttamente per spazi, newline, ecc.
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
     updateMetrics(document.getElementById('editor').innerHTML, words);
     return words;
@@ -329,6 +439,5 @@ window.openStats = () => { document.getElementById('stats-modal').classList.add(
 window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
 window.toggleTheme = () => { document.body.classList.toggle('light-mode'); localStorage.setItem('theme', document.body.classList.contains('light-mode')?'light':'dark'); };
 window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${currentDateString}.html`; a.click(); };
-window.openQuestionsHistory = () => { const c = document.getElementById('questions-list-container'); c.innerHTML = "Archivio domande in arrivo..."; document.getElementById('questions-modal').classList.add('open'); };
 
 function renderChart() { const ctx = document.getElementById('chartCanvas').getContext('2d'); if(window.myChart) window.myChart.destroy(); window.myChart = new Chart(ctx, { type:'bar', data:{labels:['Oggi'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} }); }

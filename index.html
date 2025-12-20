@@ -31,7 +31,7 @@
                 
                 <div style="display:flex; gap:5px; align-items:center;">
                     <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
-                    <button class="tool-btn" onclick="openQuestionsHistory()" title="Archivio Domande"><span class="material-icons-round">menu_book</span></button>
+                    <button class="tool-btn" onclick="openCoachManager()" title="Gestisci Coach"><span class="material-icons-round">menu_book</span></button>
                     <button class="tool-btn" onclick="openStats()" title="Stats"><span class="material-icons-round">bar_chart</span></button>
                     <button class="tool-btn" onclick="openSettings()" title="Settings"><span class="material-icons-round">settings</span></button>
                     <img id="user-pic" src="" style="width:28px; height:28px; border-radius:50%; border:2px solid var(--accent); margin-left:5px;">
@@ -89,9 +89,30 @@
     </div>
 
     <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
+    
     <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
+    
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
-    <div id="questions-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Domande</h2><button onclick="document.getElementById('questions-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="questions-list-container"></div></div></div>
+    
+    <div id="coach-manager-modal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 style="margin:0;">Gestione Coach 🧠</h2>
+                <button onclick="document.getElementById('coach-manager-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
+            </div>
+            
+            <div class="coach-input-area">
+                <input type="text" id="new-prompt-input" placeholder="Scrivi una nuova domanda..." onkeyup="if(event.key==='Enter') addCoachPrompt()">
+                <button class="btn-primary" style="padding: 8px 15px; border-radius: 8px;" onclick="addCoachPrompt()">Aggiungi</button>
+            </div>
+            
+            <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Le tue domande personalizzate per il Brainstorming:</div>
+            
+            <div id="coach-list-container">
+                </div>
+        </div>
+    </div>
+
     <div id="stats-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Statistiche</h2><button onclick="document.getElementById('stats-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="margin:20px 0;">Parole Oggi: <span id="stat-count-today" style="color:var(--accent); font-weight:bold;">0</span></div><canvas id="chartCanvas" height="150"></canvas></div></div>
 
     <div id="settings-modal" class="modal">
