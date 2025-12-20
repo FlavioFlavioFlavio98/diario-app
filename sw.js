@@ -1,7 +1,7 @@
 // Service Worker - Diario Intelligente (PWA)
 // Cache solo degli asset locali (non Firestore / non CDN esterni)
 
-const CACHE_NAME = 'diario-store-v13.1';
+const CACHE_NAME = 'diario-store-v13.2'; // <-- bump versione cache
 const ASSETS = [
   './',
   './index.html',
