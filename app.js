@@ -1,9 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-// IMPORT SDK GENAI
-import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@1.33.0/dist/web/index.mjs";
-
+// NUOVA IMPORTAZIONE DIRETTA DELLA SDK GENAI
 // VARIABILE per l'istanza AI
 let aiInstance = null;
 
@@ -22,53 +20,20 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// DEFAULT PROMPTS (Le 30 domande iniziali)
-const defaultPrompts = [
-    "Qual è stata la cosa migliore che ti è successa oggi?",
-    "Scrivi 3 cose, anche piccole, per cui sei grato in questo momento.",
-    "C'è stato un momento oggi in cui ti sei sentito veramente in pace?",
-    "Cosa ti ha fatto sorridere oggi?",
-    "Qual è la lezione più importante che hai imparato oggi?",
-    "Chi ha reso la tua giornata migliore e perché?",
-    "Come ti sei preso cura di te stesso oggi?",
-    "Qual è l'obiettivo principale che vuoi raggiungere domani?",
-    "C'è qualcosa che stai rimandando? Perché?",
-    "Se potessi rifare la giornata di oggi, cosa cambieresti?",
-    "Quale piccola azione puoi fare ora per migliorare la tua settimana?",
-    "Cosa ti ha fatto perdere tempo oggi?",
-    "Hai fatto un passo avanti verso i tuoi sogni oggi? Quale?",
-    "Come valuti la tua energia oggi da 1 a 10 e perché?",
-    "Quale emozione ha prevalso oggi?",
-    "C'è qualcosa che ti preoccupa? Scrivilo per toglierlo dalla testa.",
-    "C'è una conversazione che avresti voluto affrontare diversamente?",
-    "Cosa ti sta togliendo energia in questo periodo?",
-    "Cosa faresti se non avessi paura di fallire?",
-    "C'è un pensiero ricorrente che ti sta disturbando?",
-    "Scrivi una lettera al te stesso di 5 anni fa.",
-    "C'è qualcosa che devi 'lasciar andare' prima di dormire?",
-    "Se la tua giornata fosse un film, che titolo avrebbe?",
-    "Descrivi la giornata di oggi usando solo 3 parole.",
-    "Se potessi essere ovunque nel mondo ora, dove saresti?",
-    "Qual è l'idea più strana che ti è venuta in mente oggi?",
-    "Scrivi la prima frase del libro della tua vita.",
-    "Come ti immagini tra un anno esatto?",
-    "Qual è la cosa che aspetti con più ansia nel prossimo futuro?",
-    "Scrivi un messaggio di incoraggiamento per il te stesso di domani mattina."
-];
-
 // VARIABILI GLOBALI
 let currentUser = null;
 let currentDateString = new Date().toISOString().split('T')[0]; 
 let currentDayStats = {};
 let questionHistory = {}; 
+let questionPrefs = {}; 
 let currentTags = [];
 let globalWordCount = 0; 
 let sessionStartTime = Date.now();
-let currentPrompts = []; // Array in memoria per le domande
 
 // SERVICE WORKER & LOGIN
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
+// Esportiamo la funzione login globalmente per il pulsante HTML
 window.login = () => signInWithPopup(auth, provider);
 
 // GESTIONE STATO UTENTE
@@ -83,126 +48,17 @@ onAuthStateChanged(auth, async (user) => {
         const savedKey = localStorage.getItem('GEMINI_API_KEY');
         if(savedKey) {
             document.getElementById('gemini-api-key').value = savedKey;
-            initializeAi(savedKey); 
+            initializeAi(savedKey); // Inizializza l'AI al login
         }
 
-        loadGlobalStats(); 
+        // Caricamento dati
+        await loadGlobalStats();
         loadDiaryForDate(currentDateString);
         startSessionTimer();
-        
-        // Carica le domande del Coach
-        loadCoachPrompts();
     }
 });
 
-// --- COACH MANAGER LOGIC (NUOVA SEZIONE) ---
-
-// Carica le domande da Firestore (o inizializza con default)
-async function loadCoachPrompts() {
-    if (!currentUser) return;
-    try {
-        const docRef = doc(db, "diario", currentUser.uid, "settings", "coach");
-        const snap = await getDoc(docRef);
-        
-        if (snap.exists() && snap.data().prompts && snap.data().prompts.length > 0) {
-            currentPrompts = snap.data().prompts;
-        } else {
-            // Se non esistono, salva quelle di default
-            currentPrompts = [...defaultPrompts];
-            await setDoc(docRef, { prompts: currentPrompts }, { merge: true });
-        }
-        console.log("Coach prompts loaded:", currentPrompts.length);
-    } catch (e) {
-        console.error("Errore caricamento prompts:", e);
-        currentPrompts = [...defaultPrompts]; // Fallback
-    }
-}
-
-// Salva array corrente su DB
-async function savePromptsToDb() {
-    if (!currentUser) return;
-    try {
-        await setDoc(doc(db, "diario", currentUser.uid, "settings", "coach"), { 
-            prompts: currentPrompts 
-        }, { merge: true });
-        renderCoachList(); // Aggiorna UI
-    } catch (e) {
-        alert("Errore salvataggio modifiche Coach: " + e.message);
-    }
-}
-
-window.openCoachManager = () => {
-    document.getElementById('coach-manager-modal').classList.add('open');
-    renderCoachList();
-};
-
-function renderCoachList() {
-    const listContainer = document.getElementById('coach-list-container');
-    listContainer.innerHTML = '';
-    
-    currentPrompts.forEach((prompt, index) => {
-        const div = document.createElement('div');
-        div.className = 'coach-item';
-        div.innerHTML = `
-            <div class="coach-text">${prompt}</div>
-            <div class="coach-btn-group">
-                <button class="coach-action-btn" onclick="editCoachPrompt(${index})" title="Modifica">✏️</button>
-                <button class="coach-action-btn coach-delete" onclick="deleteCoachPrompt(${index})" title="Elimina">🗑️</button>
-            </div>
-        `;
-        listContainer.appendChild(div);
-    });
-}
-
-window.addCoachPrompt = () => {
-    const input = document.getElementById('new-prompt-input');
-    const text = input.value.trim();
-    if (!text) return;
-    
-    currentPrompts.unshift(text); // Aggiunge all'inizio
-    input.value = '';
-    savePromptsToDb();
-};
-
-window.deleteCoachPrompt = (index) => {
-    if (confirm("Vuoi davvero eliminare questa domanda?")) {
-        currentPrompts.splice(index, 1);
-        savePromptsToDb();
-    }
-};
-
-window.editCoachPrompt = (index) => {
-    const newText = prompt("Modifica la domanda:", currentPrompts[index]);
-    if (newText !== null && newText.trim() !== "") {
-        currentPrompts[index] = newText.trim();
-        savePromptsToDb();
-    }
-};
-
-// Funzione Brainstorm aggiornata per usare l'array dinamico
-window.triggerBrainstorm = () => { 
-    if (currentPrompts.length === 0) {
-        alert("Nessuna domanda disponibile nel Coach. Aggiungine qualcuna dal menu!");
-        return;
-    }
-    const p = currentPrompts[Math.floor(Math.random() * currentPrompts.length)];
-    
-    document.getElementById('ai-title').innerText = "Coach";
-    document.getElementById('ai-message').innerText = p;
-    // Encoding sicuro per passare la stringa alla funzione JS
-    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt(decodeURIComponent('${encodeURIComponent(p)}'))">Inserisci</button>`;
-    document.getElementById('ai-coach-area').style.display = 'block';
-};
-
-window.insertPrompt = (text) => {
-    document.getElementById('editor').focus();
-    document.execCommand('insertText', false, `\n\n**Domanda:** ${text}\n**Risposta:** `);
-    document.getElementById('ai-coach-area').style.display = 'none';
-    saveData();
-};
-
-// --- ALTRE FUNZIONI (CORE) ---
-
+// --- DASHBOARD FUNCTIONS ---
 function startSessionTimer() {
     sessionStartTime = Date.now();
     setInterval(() => {
@@ -213,24 +69,22 @@ function startSessionTimer() {
     }, 1000);
 }
 
-function loadGlobalStats() {
-    const docRef = doc(db, "diario", currentUser.uid, "stats", "global");
-    onSnapshot(docRef, (snap) => {
+async function loadGlobalStats() {
+    try {
+        const docRef = doc(db, "diario", currentUser.uid, "stats", "global");
+        const snap = await getDoc(docRef);
         if (snap.exists()) {
             globalWordCount = snap.data().totalWords || 0;
-        } else {
-            globalWordCount = 0; 
         }
         document.getElementById('count-global').innerText = globalWordCount;
-    }, (error) => {
-        console.error("Errore onSnapshot global stats:", error);
-    });
+    } catch (e) { console.log("No global stats yet"); }
 }
 
 function updateMetrics(content, wordsToday) {
     document.getElementById('count-today').innerText = wordsToday;
     document.getElementById('stat-count-today').innerText = wordsToday;
 
+    // Peso file (approx)
     const size = new Blob([content]).size;
     const kb = (size / 1024).toFixed(1);
     const weightEl = document.getElementById('file-weight');
@@ -240,45 +94,150 @@ function updateMetrics(content, wordsToday) {
     else { weightEl.classList.remove('metric-danger'); }
 }
 
+// --- GEMINI AI INTEGRATION ---
+
+// Funzione di inizializzazione AI
 function initializeAi(apiKey) {
-    aiInstance = new GoogleGenAI({ apiKey: apiKey });
+    // Conserviamo solo la chiave: chiameremo l'API via fetch (REST) per maggiore compatibilità
+    aiInstance = apiKey;
 }
 
-window.saveApiKey = () => {
-    const key = document.getElementById('gemini-api-key').value.trim();
-    if(key) { 
-        localStorage.setItem('GEMINI_API_KEY', key); 
-        initializeAi(key); 
-        alert("Chiave salvata e AI Service aggiornato!"); 
-        document.getElementById('settings-modal').classList.remove('open'); 
+
+
+// =========================
+// GEMINI (REST) HELPERS
+// =========================
+function getGeminiKeyOrThrow() {
+    const key = (aiInstance || localStorage.getItem('GEMINI_API_KEY') || "").trim();
+    if (!key) {
+        const err = new Error("MISSING_KEY");
+        err.code = "MISSING_KEY";
+        throw err;
     }
+    return key;
+}
+
+async function geminiGenerateText(prompt, model = "gemini-1.5-flash") {
+    const key = getGeminiKeyOrThrow();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+
+    const body = {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, maxOutputTokens: 700 }
+    };
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+
+    if (!res.ok) {
+        const msg = data?.error?.message || `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.httpStatus = res.status;
+        err.raw = data;
+        throw err;
+    }
+
+    const text =
+        data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ||
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "";
+    return text;
+}
+
+function humanizeGeminiError(err) {
+    if (!err) return "Errore AI sconosciuto.";
+
+    if (err.message === "MISSING_KEY" || err.code === "MISSING_KEY") {
+        return "Inserisci la API Key nelle Impostazioni (Gemini).";
+    }
+
+    const msg = (err.message || "").toLowerCase();
+    const status = err.httpStatus;
+
+    if (msg.includes("api key not valid") || msg.includes("invalid api key") || msg.includes("api_key_invalid")) {
+        return "API Key non valida. Ricontrolla la chiave da Google AI Studio.";
+    }
+    if (msg.includes("referer") || msg.includes("referrer") || msg.includes("origin") || msg.includes("http referer")) {
+        return "API Key bloccata dalle restrizioni (HTTP referrer/origin). Aggiungi il dominio GitHub Pages ai referrer consentiti oppure rimuovi la restrizione.";
+    }
+    if (status === 429 || msg.includes("quota") || msg.includes("rate")) {
+        return "Quota / rate limit raggiunto. Riprova tra poco oppure controlla quota/billing nel progetto Google.";
+    }
+    if (status === 404 || msg.includes("not found") || msg.includes("model")) {
+        return "Modello non disponibile per questa chiave/progetto. Prova un modello diverso (es. gemini-1.5-flash o gemini-1.5-pro).";
+    }
+    if (status === 403) {
+        return "Accesso negato (403). Di solito è chiave errata, restrizioni referrer/origin, oppure API non abilitata nel progetto.";
+    }
+    return `Errore AI: ${err.message}`;
+}
+
+window.saveApiKey = async () => {
+    const key = document.getElementById('gemini-api-key').value.trim();
+    if (!key) return;
+
+    localStorage.setItem('GEMINI_API_KEY', key);
+    initializeAi(key);
+
+    // Test rapido: così se la chiave è bloccata/referrer/quota lo sai subito
+    try {
+        await geminiGenerateText("Rispondi con una parola: OK", "gemini-1.5-flash");
+        alert("Chiave salvata e AI OK ✅");
+    } catch (e) {
+        console.error("Test AI failed:", e);
+        alert("Chiave salvata, ma la chiamata AI fallisce:
+" + humanizeGeminiError(e));
+    }
+
+    document.getElementById('settings-modal').classList.remove('open');
 };
 
 window.generateAiSummary = async () => {
-    if (!aiInstance) { alert("Inserisci API Key nelle Impostazioni"); return; }
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
 
     document.getElementById('summary-modal').classList.add('open');
     const contentDiv = document.getElementById('ai-summary-content');
     contentDiv.innerHTML = '<div class="ai-loading">Analizzo... 🧠</div>';
-    
-    const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
+
+    const prompt =
+        `Analizza questo diario:
+"` + text + `"
+
+` +
+        `1. Riassunto breve (max 6 righe)
+` +
+        `2. Insight emotivo (1-2 frasi)
+` +
+        `3. Consiglio pratico (3 bullet)
+
+` +
+        `Formatta la risposta in Markdown.`;
 
     try {
-        const response = await aiInstance.models.generateContent({
-            model: 'gemini-pro',
-            contents: prompt,
-        });
+        // Prova flash, poi fallback su pro
+        let aiText = "";
+        try {
+            aiText = await geminiGenerateText(prompt, "gemini-1.5-flash");
+        } catch (e1) {
+            console.warn("gemini-1.5-flash failed, trying gemini-1.5-pro:", e1);
+            aiText = await geminiGenerateText(prompt, "gemini-1.5-pro");
+        }
 
-        const aiText = response.text;
-        contentDiv.innerHTML = marked.parse(aiText);
-    } catch (error) { 
-        console.error("Errore Gemini SDK:", error);
-        contentDiv.innerHTML = "Errore AI. La chiave API è scaduta o non è valida."; 
+        contentDiv.innerHTML = marked.parse(aiText || "");
+    } catch (error) {
+        console.error("Errore Gemini:", error);
+        contentDiv.innerHTML = humanizeGeminiError(error);
     }
 };
 
+// --- CORE FUNCTIONS ---
 window.changeDate = (newDate) => { currentDateString = newDate; loadDiaryForDate(newDate); };
 
 async function loadDiaryForDate(dateStr) {
@@ -331,12 +290,12 @@ async function saveData() {
 
         await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
 
-        if (deltaWords !== 0 || globalWordCount === 0) { 
-            let newGlobalCount = globalWordCount + deltaWords;
-            if (newGlobalCount < 0) newGlobalCount = 0; 
-            
+        if (deltaWords !== 0) {
+            globalWordCount += deltaWords;
+            if(globalWordCount < 0) globalWordCount = 0;
+            document.getElementById('count-global').innerText = globalWordCount;
             await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), {
-                totalWords: newGlobalCount,
+                totalWords: globalWordCount,
                 lastUpdate: new Date()
             }, { merge: true });
         }
@@ -353,6 +312,7 @@ async function saveData() {
     }
 }
 
+// --- UTILS & TAGS ---
 const tagRules = {
     'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici', 'relazione'],
     'Salute': ['cibo', 'dieta', 'fumo', 'allenamento', 'sonno', 'salute'],
@@ -397,6 +357,21 @@ function processLastBlock() {
 }
 function analyzeTextForTag(text) { const lower = text.toLowerCase(); for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) return tag; } return null; }
 
+window.triggerBrainstorm = () => { 
+    const prompts = ["Cosa ha reso oggi speciale?", "Cosa ti preoccupa?", "Gratitudine?", "Obiettivo di domani?"];
+    const p = prompts[Math.floor(Math.random()*prompts.length)];
+    document.getElementById('ai-title').innerText = "Brainstorming";
+    document.getElementById('ai-message').innerText = p;
+    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt('${p}')">Inserisci</button>`;
+    document.getElementById('ai-coach-area').style.display = 'block';
+};
+window.insertPrompt = (text) => {
+    document.getElementById('editor').focus();
+    document.execCommand('insertText', false, `\n\nDomanda: ${text}\nRisposta: `);
+    document.getElementById('ai-coach-area').style.display = 'none';
+    saveData();
+};
+
 let walkRecognition = null; let isWalkSessionActive = false;
 window.openWalkTalk = () => document.getElementById('walk-talk-modal').classList.add('open');
 window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
@@ -439,5 +414,6 @@ window.openStats = () => { document.getElementById('stats-modal').classList.add(
 window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
 window.toggleTheme = () => { document.body.classList.toggle('light-mode'); localStorage.setItem('theme', document.body.classList.contains('light-mode')?'light':'dark'); };
 window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${currentDateString}.html`; a.click(); };
+window.openQuestionsHistory = () => { const c = document.getElementById('questions-list-container'); c.innerHTML = "Archivio domande in arrivo..."; document.getElementById('questions-modal').classList.add('open'); };
 
 function renderChart() { const ctx = document.getElementById('chartCanvas').getContext('2d'); if(window.myChart) window.myChart.destroy(); window.myChart = new Chart(ctx, { type:'bar', data:{labels:['Oggi'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} }); }
