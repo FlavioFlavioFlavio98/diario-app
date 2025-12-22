@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V14.7</title>
+    <title>Diario V14.8</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -33,8 +33,6 @@
 
                 <div style="display:flex; gap:5px; align-items:center;">
                     <button class="tool-btn" onclick="openTodoList()" title="Lista Task"><span class="material-icons-round" style="color:#00e676;">check_circle</span></button>
-                    
-                    <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
                     <button class="tool-btn" onclick="openCoachManager()" title="Gestisci Coach"><span class="material-icons-round">menu_book</span></button>
                     <button class="tool-btn" onclick="openStats()" title="Stats"><span class="material-icons-round">bar_chart</span></button>
                     <button class="tool-btn" onclick="openSettings()" title="Settings"><span class="material-icons-round">settings</span></button>
@@ -53,38 +51,33 @@
             <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
             <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
             <button class="tool-btn" onclick="generateAiSummary()" title="Riassunto AI"><span class="material-icons-round" style="color:#29b6f6;">auto_awesome</span></button>
-            
             <div class="separator"></div>
-            
             <button class="tool-btn" onclick="scrollToBottom()" title="Vai alla fine"><span class="material-icons-round">arrow_downward</span></button>
-            
             <div class="separator"></div>
-
             <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
             <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
             <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
-            <button class="tool-btn" id="mic-btn" onclick="toggleDictation()"><span class="material-icons-round">mic</span></button>
-            
             </div>
         
         <div id="metrics-bar">
-            <div class="metric-item" style="min-width: 140px;">
-                <div class="timer-controls">
-                    <button class="timer-btn" onclick="timerPlay()">▶</button>
-                    <button class="timer-btn" onclick="timerPause()">II</button>
-                    <button class="timer-btn" onclick="timerStop()">■</button>
+            <div class="metric-item trip-panel" style="border: 1px solid var(--accent); padding: 2px 8px; border-radius: 6px;">
+                <span style="font-size:0.7rem; color:var(--accent); margin-right:5px;">TRIP</span>
+                <span id="trip-timer" class="metric-val">00:00</span>
+                <span style="margin:0 5px; opacity:0.5;">|</span>
+                <span id="trip-words" class="metric-val">0w</span>
+                
+                <div class="trip-controls" style="margin-left:8px; display:flex; gap:2px;">
+                    <button class="trip-btn" onclick="tripStart()" title="Start">▶</button>
+                    <button class="trip-btn" onclick="tripPause()" title="Pausa">II</button>
+                    <button class="trip-btn" onclick="tripReset()" title="Reset/Stop">■</button>
                 </div>
-                <span id="session-timer" class="metric-val" style="margin-left:5px;">00:00</span>
             </div>
 
-            <div class="metric-item" title="Parole scritte oggi">
-                <span>📝 Sess:</span> <span id="count-today" class="metric-val">0</span>
+            <div class="metric-item" title="Parole totali nel diario (Mese)">
+                <span>📚 Mese:</span> <span id="count-today" class="metric-val">0</span>
             </div>
-            <div class="metric-item" title="Parole totali nel diario">
-                <span>📚 Tot:</span> <span id="count-global" class="metric-val">Loading...</span>
-            </div>
-            <div class="metric-item" title="Peso del file attuale (max 1000KB)">
-                <span>💾</span> <span id="file-weight" class="metric-val">0 KB</span>
+             <div class="metric-item" title="Parole totali globali">
+                <span>🌍 Tot:</span> <span id="count-global" class="metric-val">...</span>
             </div>
         </div>
 
@@ -101,13 +94,15 @@
                 <h2>To-Do List 📝</h2>
                 <button onclick="document.getElementById('todo-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
             </div>
-            <p style="font-size:0.8rem; color:#888;">Questi task sono letti direttamente dal tuo diario mensile.</p>
+            <p style="font-size:0.8rem; color:#888;">Gestisci i task presenti nel diario.</p>
             <div id="todo-list-container"></div>
         </div>
     </div>
 
     <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
+    
     <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
+    
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
     
     <div id="coach-manager-modal" class="modal">
@@ -130,9 +125,27 @@
     <div id="settings-modal" class="modal">
         <div class="modal-content" style="max-width:300px;">
             <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
-            <div style="margin-top:20px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
-            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
             
+            <div style="margin-top:20px;">
+                <label style="font-size:0.8rem; color:#888;">Font Editor</label>
+                <select id="font-family-select" onchange="changeEditorFont(this.value)" style="width:100%; padding:8px; margin-bottom:10px; border-radius:5px; background:var(--bg); color:var(--text); border:1px solid var(--border);">
+                    <option value="system-ui">System (Default)</option>
+                    <option value="'Courier New', monospace">Monospace (Typewriter)</option>
+                    <option value="'Georgia', serif">Serif (Libro)</option>
+                    <option value="'Verdana', sans-serif">Verdana (Leggibile)</option>
+                </select>
+                
+                <label style="font-size:0.8rem; color:#888;">Grandezza Testo</label>
+                <select id="font-size-select" onchange="changeEditorSize(this.value)" style="width:100%; padding:8px; margin-bottom:10px; border-radius:5px; background:var(--bg); color:var(--text); border:1px solid var(--border);">
+                    <option value="0.9rem">Piccolo</option>
+                    <option value="1.1rem" selected>Normale</option>
+                    <option value="1.3rem">Grande</option>
+                    <option value="1.5rem">Molto Grande</option>
+                </select>
+            </div>
+
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
             <div style="margin-top:10px;"><button style="width:100%; padding:10px; background:#ff5252; color:white; border:none;" onclick="forceAppRefresh()">🔄 Aggiorna App (Fix Mobile)</button></div>
             
             <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
@@ -142,6 +155,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=14.7"></script>
+    <script type="module" src="app.js?v=14.8"></script>
 </body>
 </html>
