@@ -1,10 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@1.33.0/dist/web/index.mjs";
+// CAMBIO LIBRERIA: Uso quella Standard e Stabile per Web
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.2";
+const APP_VERSION = "V14.3";
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -98,53 +99,42 @@ onAuthStateChanged(auth, async (user) => {
         loadGlobalStats(); 
         await loadDiaryForDate(currentDateString);
         loadCoachPrompts();
-        
-        // Avvia il timer automaticamente al login
         timerPlay();
     }
 });
 
-// --- NUOVA LOGICA: @now trigger (Robust detection) ---
+// --- NUOVA LOGICA: @now trigger ---
 document.getElementById('editor').addEventListener('input', (e) => {
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
         const node = sel.anchorNode;
-        // Controlliamo solo se siamo dentro un nodo di testo
         if (node.nodeType === 3) {
             const text = node.textContent;
-            // Prendiamo il testo FINO alla posizione del cursore
             const caretPos = sel.anchorOffset;
             const textBeforeCaret = text.substring(0, caretPos);
             
             if (textBeforeCaret.endsWith('@now')) {
-                // Abbiamo trovato il trigger!
-                
-                // 1. Selezioniamo il testo "@now"
                 const range = document.createRange();
                 range.setStart(node, caretPos - 4);
                 range.setEnd(node, caretPos);
                 sel.removeAllRanges();
                 sel.addRange(range);
                 
-                // 2. Prepariamo la data
                 const now = new Date();
                 const dateStr = now.toLocaleDateString('it-IT');
                 const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
                 const htmlToInsert = `<span style="color: #ff5252; font-weight: bold;">📅 ${dateStr} - ${timeStr}</span>&nbsp;`;
                 
-                // 3. Sovrascriviamo la selezione con l'HTML
                 document.execCommand('insertHTML', false, htmlToInsert);
             }
         }
     }
-    
-    // Auto-save logic
     updateCounts(); 
     clearTimeout(timeout); 
     timeout = setTimeout(saveData, 1500);
 });
 
-// --- TIMER LOGIC (Accumulatore) ---
+// --- TIMER LOGIC ---
 window.timerPlay = () => {
     if (isTimerRunning) return;
     isTimerRunning = true;
@@ -171,7 +161,6 @@ function updateTimerDisplay() {
     const s = (timerSeconds % 60).toString().padStart(2, '0');
     document.getElementById('session-timer').innerText = `${m}:${s}`;
 }
-
 
 // --- COACH MANAGER LOGIC ---
 async function loadCoachPrompts() {
@@ -267,24 +256,18 @@ window.triggerBrainstorm = () => {
     document.getElementById('ai-coach-area').style.display = 'block';
 };
 
-// --- NUOVA FUNZIONE: SCROLL TO BOTTOM ---
 window.scrollToBottom = () => {
     const editor = document.getElementById('editor');
     editor.focus();
-    
-    // 1. Sposta il cursore alla fine
     const range = document.createRange();
     range.selectNodeContents(editor);
-    range.collapse(false); // va alla fine
+    range.collapse(false);
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
-    
-    // 2. Forza lo scroll
     editor.scrollTop = editor.scrollHeight;
 };
 
-// --- INSERIMENTO DOMANDA (Arancione + Scroll) ---
 window.insertPrompt = (promptId) => {
     const pIndex = currentPrompts.findIndex(p => p.id == promptId);
     let textToInsert = "Domanda...";
@@ -294,16 +277,14 @@ window.insertPrompt = (promptId) => {
         savePromptsToDb();
     }
 
-    // Usiamo la funzione di scroll per preparare il terreno (focus + fine)
     window.scrollToBottom();
 
-    // Inseriamo in arancione (#ff9100)
+    // Colore ARANCIONE
     const html = `<br><p style="color: #ff9100; font-weight: bold; margin-bottom: 5px;">Domanda: ${textToInsert}</p><p>Risposta: </p>`;
     document.execCommand('insertHTML', false, html);
     
     document.getElementById('ai-coach-area').style.display = 'none';
     
-    // Scrolla ancora per sicurezza dopo l'inserimento
     setTimeout(() => { 
         const editor = document.getElementById('editor');
         editor.scrollTop = editor.scrollHeight; 
@@ -329,10 +310,7 @@ async function loadDiaryForDate(dateStr) {
             if (document.activeElement.id !== 'editor') { 
                 document.getElementById('editor').innerHTML = data.htmlContent || ""; 
             }
-            
-            // Scroll automatico all'apertura
             setTimeout(window.scrollToBottom, 200);
-
             currentDayStats = data.stats || {};
             currentTags = data.tags || [];
             updateMetrics(data.htmlContent || "", updateCounts());
@@ -416,25 +394,41 @@ function updateMetrics(content, wordsToday) {
     else { weightEl.classList.remove('metric-danger'); }
 }
 
-function initializeAi(apiKey) { aiInstance = new GoogleGenAI({ apiKey: apiKey }); }
+// --- NUOVA INIZIALIZZAZIONE AI (Libreria Standard) ---
+function initializeAi(apiKey) {
+    // La libreria standard usa GoogleGenerativeAI direttamente con la chiave
+    aiInstance = new GoogleGenerativeAI(apiKey);
+}
 
 window.saveApiKey = () => {
     const key = document.getElementById('gemini-api-key').value.trim();
     if(key) { localStorage.setItem('GEMINI_API_KEY', key); initializeAi(key); alert("Chiave salvata!"); document.getElementById('settings-modal').classList.remove('open'); }
 };
 
+// --- NUOVA GENERAZIONE SUMMARY (Gemini 1.5 Flash) ---
 window.generateAiSummary = async () => {
     if (!aiInstance) { alert("Inserisci API Key nelle Impostazioni"); return; }
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
+
     document.getElementById('summary-modal').classList.add('open');
     const contentDiv = document.getElementById('ai-summary-content');
-    contentDiv.innerHTML = '<div class="ai-loading">Analizzo... 🧠</div>';
+    contentDiv.innerHTML = '<div class="ai-loading">Analizzo con Gemini 1.5... 🧠</div>';
+    
     const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
+
     try {
-        const response = await aiInstance.models.generateContent({ model: 'gemini-pro', contents: prompt });
-        contentDiv.innerHTML = marked.parse(response.text);
-    } catch (error) { contentDiv.innerHTML = "Errore AI."; }
+        // Sintassi aggiornata per @google/generative-ai
+        const model = aiInstance.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const aiText = response.text();
+        
+        contentDiv.innerHTML = marked.parse(aiText);
+    } catch (error) { 
+        console.error("AI Error:", error);
+        contentDiv.innerHTML = "Errore durante la generazione. Controlla la console per i dettagli. Assicurati che l'API key sia valida."; 
+    }
 };
 
 const tagRules = {
