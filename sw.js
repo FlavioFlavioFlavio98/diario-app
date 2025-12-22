@@ -1,9 +1,9 @@
-const CACHE_NAME = 'diario-cache-v14-3'; // VERSIONE 14.3
+const CACHE_NAME = 'diario-cache-v14-6'; // VERSIONE 2025
 const assetsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js?v=14.3',
+  './app.js?v=14.6',
   './manifest.json'
 ];
 
