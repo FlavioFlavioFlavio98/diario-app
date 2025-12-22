@@ -2,10 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// --- NESSUNA LIBRERIA AI ESTERNA NECESSARIA ---
+// --- NESSUNA LIBRERIA AI ESTERNA (Usiamo Fetch Nativo) ---
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.4"; // Aggiornata
+const APP_VERSION = "V14.5"; // Aggiornata per fix AI
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -100,7 +100,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- NUOVA LOGICA: @now trigger ---
+// --- LOGICA @now ---
 document.getElementById('editor').addEventListener('input', (e) => {
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
@@ -400,7 +400,8 @@ window.saveApiKey = () => {
     }
 };
 
-// --- REST API CALL (Senza Libreria) ---
+// --- FUNZIONE AI CORRETTA (Chiamata Diretta REST API) ---
+// Modello usato: gemini-1.5-flash
 window.generateAiSummary = async () => {
     const apiKey = localStorage.getItem('GEMINI_API_KEY');
     if (!apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
@@ -410,12 +411,12 @@ window.generateAiSummary = async () => {
 
     document.getElementById('summary-modal').classList.add('open');
     const contentDiv = document.getElementById('ai-summary-content');
-    contentDiv.innerHTML = '<div class="ai-loading">Analizzo con Gemini 1.5... 🧠</div>';
+    contentDiv.innerHTML = '<div class="ai-loading">Analizzo con Gemini 1.5 Flash... 🧠</div>';
     
     const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
 
     try {
-        // CHIAMATA REST DIRETTA
+        // Endpoint REST API Ufficiale
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
         
         const response = await fetch(url, {
@@ -437,8 +438,13 @@ window.generateAiSummary = async () => {
             throw new Error(data.error?.message || "Errore API sconosciuto");
         }
 
-        const aiText = data.candidates[0].content.parts[0].text;
-        contentDiv.innerHTML = marked.parse(aiText);
+        // Estrazione della risposta
+        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+             const aiText = data.candidates[0].content.parts[0].text;
+             contentDiv.innerHTML = marked.parse(aiText);
+        } else {
+             throw new Error("Formato risposta non valido.");
+        }
         
     } catch (error) { 
         console.error("AI Error:", error);
