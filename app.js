@@ -1,17 +1,15 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-// CAMBIO LIBRERIA: Uso quella Standard e Stabile per Web
-import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+// --- NESSUNA LIBRERIA AI ESTERNA NECESSARIA ---
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.3";
+const APP_VERSION = "V14.4"; // Aggiornata
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
 if(loginVerEl) loginVerEl.innerText = APP_VERSION;
-
-let aiInstance = null;
 
 const firebaseConfig = {
     apiKey: "AIzaSyCYndAl9MKtZDTK5ivbtmaqDa-r6vEe6SM",
@@ -93,7 +91,6 @@ onAuthStateChanged(auth, async (user) => {
         const savedKey = localStorage.getItem('GEMINI_API_KEY');
         if(savedKey) {
             document.getElementById('gemini-api-key').value = savedKey;
-            initializeAi(savedKey); 
         }
 
         loadGlobalStats(); 
@@ -394,20 +391,20 @@ function updateMetrics(content, wordsToday) {
     else { weightEl.classList.remove('metric-danger'); }
 }
 
-// --- NUOVA INIZIALIZZAZIONE AI (Libreria Standard) ---
-function initializeAi(apiKey) {
-    // La libreria standard usa GoogleGenerativeAI direttamente con la chiave
-    aiInstance = new GoogleGenerativeAI(apiKey);
-}
-
 window.saveApiKey = () => {
     const key = document.getElementById('gemini-api-key').value.trim();
-    if(key) { localStorage.setItem('GEMINI_API_KEY', key); initializeAi(key); alert("Chiave salvata!"); document.getElementById('settings-modal').classList.remove('open'); }
+    if(key) { 
+        localStorage.setItem('GEMINI_API_KEY', key); 
+        alert("Chiave salvata! Ora riprova il tasto AI."); 
+        document.getElementById('settings-modal').classList.remove('open'); 
+    }
 };
 
-// --- NUOVA GENERAZIONE SUMMARY (Gemini 1.5 Flash) ---
+// --- REST API CALL (Senza Libreria) ---
 window.generateAiSummary = async () => {
-    if (!aiInstance) { alert("Inserisci API Key nelle Impostazioni"); return; }
+    const apiKey = localStorage.getItem('GEMINI_API_KEY');
+    if (!apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
+    
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
 
@@ -418,16 +415,34 @@ window.generateAiSummary = async () => {
     const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
 
     try {
-        // Sintassi aggiornata per @google/generative-ai
-        const model = aiInstance.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const aiText = response.text();
+        // CHIAMATA REST DIRETTA
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
         
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("API Error Data:", data);
+            throw new Error(data.error?.message || "Errore API sconosciuto");
+        }
+
+        const aiText = data.candidates[0].content.parts[0].text;
         contentDiv.innerHTML = marked.parse(aiText);
+        
     } catch (error) { 
         console.error("AI Error:", error);
-        contentDiv.innerHTML = "Errore durante la generazione. Controlla la console per i dettagli. Assicurati che l'API key sia valida."; 
+        contentDiv.innerHTML = `<strong>Errore AI:</strong> ${error.message}<br><br>Controlla la chiave API e riprova.`; 
     }
 };
 
