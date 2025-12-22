@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, o
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.8";
+const APP_VERSION = "V14.8 Full";
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -23,9 +23,43 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// DEFAULT PROMPTS (omessi per brevità, sono gli stessi)
-const defaultPromptsText = ["Qual è stata la cosa migliore che ti è successa oggi?","Scrivi 3 cose, anche piccole, per cui sei grato in questo momento.","C'è stato un momento oggi in cui ti sei sentito veramente in pace?","Cosa ti ha fatto sorridere oggi?","Qual è la lezione più importante che hai imparato oggi?","Chi ha reso la tua giornata migliore e perché?","Come ti sei preso cura di te stesso oggi?","Qual è l'obiettivo principale che vuoi raggiungere domani?","C'è qualcosa che stai rimandando? Perché?","Se potessi rifare la giornata di oggi, cosa cambieresti?","Quale piccola azione puoi fare ora per migliorare la tua settimana?","Cosa ti ha fatto perdere tempo oggi?","Hai fatto un passo avanti verso i tuoi sogni oggi? Quale?","Come valuti la tua energia oggi da 1 a 10 e perché?","Quale emozione ha prevalso oggi?","C'è qualcosa che ti preoccupa? Scrivilo per toglierlo dalla testa.","C'è una conversazione che avresti voluto affrontare diversamente?","Cosa ti sta togliendo energia in questo periodo?","Cosa faresti se non avessi paura di fallire?","C'è un pensiero ricorrente che ti sta disturbando?","Scrivi una lettera al te stesso di 5 anni fa.","C'è qualcosa che devi 'lasciar andare' prima di dormire?","Se la tua giornata fosse un film, che titolo avrebbe?","Descrivi la giornata di oggi usando solo 3 parole.","Se potessi essere ovunque nel mondo ora, dove saresti?","Qual è l'idea più strana che ti è venuta in mente oggi?","Scrivi la prima frase del libro della tua vita.","Come ti immagini tra un anno esatto?","Qual è la cosa che aspetti con più ansia nel prossimo futuro?","Scrivi un messaggio di incoraggiamento per il te stesso di domani mattina."];
-function createPromptObj(text) { return { id: Date.now() + Math.random(), text: text, usage: 0 }; }
+// DEFAULT PROMPTS (Lista Completa)
+const defaultPromptsText = [
+    "Qual è stata la cosa migliore che ti è successa oggi?",
+    "Scrivi 3 cose, anche piccole, per cui sei grato in questo momento.",
+    "C'è stato un momento oggi in cui ti sei sentito veramente in pace?",
+    "Cosa ti ha fatto sorridere oggi?",
+    "Qual è la lezione più importante che hai imparato oggi?",
+    "Chi ha reso la tua giornata migliore e perché?",
+    "Come ti sei preso cura di te stesso oggi?",
+    "Qual è l'obiettivo principale che vuoi raggiungere domani?",
+    "C'è qualcosa che stai rimandando? Perché?",
+    "Se potessi rifare la giornata di oggi, cosa cambieresti?",
+    "Quale piccola azione puoi fare ora per migliorare la tua settimana?",
+    "Cosa ti ha fatto perdere tempo oggi?",
+    "Hai fatto un passo avanti verso i tuoi sogni oggi? Quale?",
+    "Come valuti la tua energia oggi da 1 a 10 e perché?",
+    "Quale emozione ha prevalso oggi?",
+    "C'è qualcosa che ti preoccupa? Scrivilo per toglierlo dalla testa.",
+    "C'è una conversazione che avresti voluto affrontare diversamente?",
+    "Cosa ti sta togliendo energia in questo periodo?",
+    "Cosa faresti se non avessi paura di fallire?",
+    "C'è un pensiero ricorrente che ti sta disturbando?",
+    "Scrivi una lettera al te stesso di 5 anni fa.",
+    "C'è qualcosa che devi 'lasciar andare' prima di dormire?",
+    "Se la tua giornata fosse un film, che titolo avrebbe?",
+    "Descrivi la giornata di oggi usando solo 3 parole.",
+    "Se potessi essere ovunque nel mondo ora, dove saresti?",
+    "Qual è l'idea più strana che ti è venuta in mente oggi?",
+    "Scrivi la prima frase del libro della tua vita.",
+    "Come ti immagini tra un anno esatto?",
+    "Qual è la cosa che aspetti con più ansia nel prossimo futuro?",
+    "Scrivi un messaggio di incoraggiamento per il te stesso di domani mattina."
+];
+
+function createPromptObj(text) {
+    return { id: Date.now() + Math.random(), text: text, usage: 0 };
+}
 
 // VARIABILI GLOBALI
 let currentUser = null;
@@ -75,9 +109,11 @@ function loadSettings() {
     document.documentElement.style.setProperty('--editor-font', font);
     document.documentElement.style.setProperty('--editor-size', size);
     
-    // Aggiorna UI dropdown
-    document.getElementById('font-family-select').value = font;
-    document.getElementById('font-size-select').value = size;
+    // Aggiorna UI dropdown se esistono
+    const fontSel = document.getElementById('font-family-select');
+    const sizeSel = document.getElementById('font-size-select');
+    if(fontSel) fontSel.value = font;
+    if(sizeSel) sizeSel.value = size;
 }
 
 window.changeEditorFont = (val) => {
@@ -103,23 +139,22 @@ window.forceAppRefresh = async () => {
 };
 
 // --- FIX CURSORE & CHECKBOX LISTENER ---
-// Delegated event listener per gestire i click sulle checkbox senza ricaricare
 document.getElementById('editor').addEventListener('click', (e) => {
     if (e.target.classList.contains('smart-task')) {
-        // Toggle manuale attributo DOM
+        // Toggle manuale attributo DOM per persistenza visiva immediata
         if (e.target.hasAttribute('checked')) {
             e.target.removeAttribute('checked');
-            e.target.checked = false; // visivo
+            e.target.checked = false; 
         } else {
             e.target.setAttribute('checked', 'true');
-            e.target.checked = true; // visivo
+            e.target.checked = true; 
         }
         
         // Segnala che è una modifica locale per bloccare onSnapshot
         isLocalChange = true;
         saveData();
         
-        // Dopo un po' resettiamo il flag, ma onSnapshot lo controllerà
+        // Dopo un po' resettiamo il flag
         setTimeout(() => isLocalChange = false, 2000);
     }
 });
@@ -134,6 +169,7 @@ document.getElementById('editor').addEventListener('input', (e) => {
             const caretPos = sel.anchorOffset;
             const textBeforeCaret = text.substring(0, caretPos);
             
+            // @now logic
             if (textBeforeCaret.endsWith('@now')) {
                 const range = document.createRange();
                 range.setStart(node, caretPos - 4);
@@ -145,6 +181,7 @@ document.getElementById('editor').addEventListener('input', (e) => {
                 document.execCommand('insertHTML', false, htmlToInsert);
             }
 
+            // @task logic
             if (textBeforeCaret.endsWith('@task')) {
                 const range = document.createRange();
                 range.setStart(node, caretPos - 5);
@@ -233,13 +270,11 @@ function harvestTasks() {
     return tasks;
 }
 
-// Funzione chiamata dal MODALE per aggiornare l'EDITOR
 window.toggleTaskFromModal = (taskId, isChecked) => {
     const editor = document.getElementById('editor');
     const checkbox = editor.querySelector(`#${taskId}`);
     
     if (checkbox) {
-        // Aggiorna lo stato nel DOM (senza focus)
         if (isChecked) {
             checkbox.setAttribute('checked', 'true');
             checkbox.checked = true;
@@ -247,11 +282,7 @@ window.toggleTaskFromModal = (taskId, isChecked) => {
             checkbox.removeAttribute('checked');
             checkbox.checked = false;
         }
-        
-        // Salva immediatamente
         saveData();
-        
-        // Ridisegna la lista task per riflettere lo stato
         setTimeout(window.openTodoList, 100); 
     }
 };
@@ -268,7 +299,6 @@ window.openTodoList = () => {
             const row = document.createElement('div');
             row.style.cssText = "padding:10px; border-bottom:1px solid #333; display:flex; align-items:center; gap:10px;";
             
-            // Creiamo checkbox che comanda l'editor
             const cb = document.createElement('input');
             cb.type = "checkbox";
             cb.checked = task.done;
@@ -287,7 +317,7 @@ window.openTodoList = () => {
     modal.classList.add('open');
 };
 
-// ... COACH (Invariato) ...
+// --- COACH MANAGER LOGIC ---
 async function loadCoachPrompts() {
     if (!currentUser) return;
     try {
@@ -307,11 +337,39 @@ function renderCoachList() { const c = document.getElementById('coach-list-conta
 window.addCoachPrompt = () => { const i=document.getElementById('new-prompt-input'); const t=i.value.trim(); if(!t)return; currentPrompts.unshift(createPromptObj(t)); i.value=''; savePromptsToDb(); };
 window.deleteCoachPrompt = (i) => { if(confirm("Eliminare?")) { currentPrompts.splice(i,1); savePromptsToDb(); } };
 window.editCoachPrompt = (i) => { const t=prompt("Modifica:", currentPrompts[i].text); if(t) { currentPrompts[i].text=t.trim(); savePromptsToDb(); } };
-window.triggerBrainstorm = () => { if(currentPrompts.length===0) return; const p=currentPrompts[Math.floor(Math.random()*currentPrompts.length)]; document.getElementById('ai-title').innerText="Coach"; document.getElementById('ai-message').innerText=p.text; document.getElementById('ai-actions').innerHTML=`<button class="ai-btn-small" onclick="insertPrompt('${p.id}')">Inserisci</button>`; document.getElementById('ai-coach-area').style.display='block'; };
-window.scrollToBottom = () => { const e=document.getElementById('editor'); e.focus(); const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); e.scrollTop=e.scrollHeight; };
-window.insertPrompt = (id) => { const i=currentPrompts.findIndex(p=>p.id==id); let t="Domanda..."; if(i>-1){ currentPrompts[i].usage=(currentPrompts[i].usage||0)+1; t=currentPrompts[i].text; savePromptsToDb(); } window.scrollToBottom(); document.execCommand('insertHTML',false,`<br><p style="color:#ff9100;font-weight:bold;margin-bottom:5px;">Domanda: ${t}</p><p>Risposta: </p>`); document.getElementById('ai-coach-area').style.display='none'; setTimeout(()=>{document.getElementById('editor').scrollTop=document.getElementById('editor').scrollHeight;},100); saveData(); };
 
-// ... CORE ...
+window.triggerBrainstorm = () => { 
+    if (currentPrompts.length === 0) return;
+    const p = currentPrompts[Math.floor(Math.random() * currentPrompts.length)];
+    document.getElementById('ai-title').innerText = "Coach";
+    document.getElementById('ai-message').innerText = p.text;
+    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt('${p.id}')">Inserisci</button>`;
+    document.getElementById('ai-coach-area').style.display = 'block';
+};
+
+window.scrollToBottom = () => { 
+    const e = document.getElementById('editor'); e.focus(); 
+    const r = document.createRange(); r.selectNodeContents(e); r.collapse(false); 
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r); 
+    e.scrollTop = e.scrollHeight; 
+};
+
+window.insertPrompt = (id) => { 
+    const i = currentPrompts.findIndex(p => p.id == id); 
+    let t = "Domanda..."; 
+    if (i > -1) { 
+        currentPrompts[i].usage = (currentPrompts[i].usage || 0) + 1; 
+        t = currentPrompts[i].text; 
+        savePromptsToDb(); 
+    } 
+    window.scrollToBottom(); 
+    document.execCommand('insertHTML', false, `<br><p style="color:#ff9100;font-weight:bold;margin-bottom:5px;">Domanda: ${t}</p><p>Risposta: </p>`); 
+    document.getElementById('ai-coach-area').style.display = 'none'; 
+    setTimeout(() => { document.getElementById('editor').scrollTop = document.getElementById('editor').scrollHeight; }, 100); 
+    saveData(); 
+};
+
+// --- CORE FUNCTIONS ---
 window.changeDate = (d) => { currentDateString = d; loadDiaryForDate(d); };
 
 async function loadDiaryForDate(dateStr) {
@@ -319,14 +377,11 @@ async function loadDiaryForDate(dateStr) {
     const docRef = doc(db, "diario", currentUser.uid, "entries", dateStr);
     
     onSnapshot(docRef, (snap) => {
-        // SE STIAMO SCRIVENDO (isLocalChange) o SE L'ELEMENTO ATTIVO È L'EDITOR, IGNORA L'UPDATE VISIVO
-        // Questo impedisce il "salto" del cursore
+        // BLOCCO REFRESH SE MODIFICA LOCALE O FOCUS ATTIVO
         if (isLocalChange || (document.activeElement.id === 'editor' && document.hasFocus())) {
-            // Aggiorniamo solo le stats silenziose, non l'HTML
             if (snap.exists()) {
                 const data = snap.data();
                 collectedTasks = data.tasks || [];
-                // Non tocchiamo editor.innerHTML
             }
             return; 
         }
@@ -370,7 +425,7 @@ async function saveData() {
 
         const delta = wordsToday - (currentDayStats.words || 0);
         if (delta !== 0 || globalWordCount === 0) {
-            let newGlobal = globalWordCount + delta; if(newGlobal<0) newGlobal=0;
+            let newGlobal = globalWordCount + delta; if(newGlobal < 0) newGlobal = 0;
             await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { totalWords: newGlobal, lastUpdate: new Date() }, { merge: true });
         }
 
@@ -390,6 +445,7 @@ function updateMetrics(content, wordsToday) {
 
 window.saveApiKey = () => { const k = document.getElementById('gemini-api-key').value.trim(); if(k) { localStorage.setItem('GEMINI_API_KEY', k); alert("Saved!"); document.getElementById('settings-modal').classList.remove('open'); } };
 
+// --- AI SUMMARY (Gemini 3.0 Flash Preview) ---
 window.generateAiSummary = async () => {
     const apiKey = localStorage.getItem('GEMINI_API_KEY');
     if (!apiKey) { alert("Manca API Key"); return; }
@@ -410,15 +466,113 @@ window.generateAiSummary = async () => {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error?.message || "Err");
-        contentDiv.innerHTML = marked.parse(data.candidates[0].content.parts[0].text);
+        
+        if(data.candidates && data.candidates[0].content && data.candidates[0].content.parts){
+            contentDiv.innerHTML = marked.parse(data.candidates[0].content.parts[0].text);
+        } else {
+            throw new Error("Risposta vuota");
+        }
     } catch (error) { contentDiv.innerHTML = `Err: ${error.message}`; }
 };
 
+// --- TAGS ---
+const tagRules = {
+    'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici', 'relazione'],
+    'Salute': ['cibo', 'dieta', 'fumo', 'allenamento', 'sonno', 'salute'],
+    'Lavoro': ['progetto', 'app', 'business', 'soldi', 'produttività'],
+    'Mindset': ['gratitudine', 'ansia', 'felice', 'triste', 'paura']
+};
+function detectTagsInContent(text) {
+    const lower = text.toLowerCase(); const found = new Set();
+    for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) found.add(tag); }
+    return Array.from(found);
+}
+window.openTagExplorer = () => {
+    document.getElementById('tag-modal').classList.add('open');
+    const cloud = document.getElementById('tag-cloud'); cloud.innerHTML = '';
+    Object.keys(tagRules).forEach(tag => {
+        const btn = document.createElement('span'); btn.className = 'tag-chip'; btn.innerText = tag; btn.onclick = () => searchByTag(tag); cloud.appendChild(btn);
+    });
+};
+async function searchByTag(tagName) {
+    const resultsDiv = document.getElementById('tag-results'); resultsDiv.innerHTML = "Cerco...";
+    const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
+    const querySnapshot = await getDocs(q); resultsDiv.innerHTML = '';
+    if (querySnapshot.empty) { resultsDiv.innerHTML = "Nessun risultato."; return; }
+    querySnapshot.forEach((doc) => {
+        const div = document.createElement('div'); div.className = 'result-row';
+        div.innerHTML = `<span>🗓️ ${doc.id}</span> <span>${doc.data().stats?.words || 0} parole</span>`;
+        div.onclick = () => { document.getElementById('tag-modal').classList.remove('open'); document.getElementById('date-picker').value = doc.id; changeDate(doc.id); };
+        resultsDiv.appendChild(div);
+    });
+}
+
+// --- UTILITIES & LEGACY ---
 window.handleKeyUp = (e) => { if (e.key === 'Enter') processLastBlock(); };
-function processLastBlock() { /* (Logica tag esistente...) */ }
+function processLastBlock() { 
+     const selection = window.getSelection(); if (!selection.rangeCount) return; 
+     let block = selection.getRangeAt(0).startContainer; 
+     while (block && block.id !== 'editor' && block.tagName !== 'DIV' && block.tagName !== 'P') { block = block.parentNode; } 
+     if (block && block.previousElementSibling) { 
+         const prevBlock = block.previousElementSibling; 
+         if (!prevBlock.querySelector('.auto-tag') && prevBlock.innerText.trim().length > 10) { 
+             const tag = analyzeTextForTag(prevBlock.innerText); 
+             if (tag) { 
+                 const tagSpan = document.createElement('span'); tagSpan.className = 'auto-tag'; tagSpan.innerText = tag; tagSpan.contentEditable = "false"; 
+                 prevBlock.prepend(tagSpan); saveData(); 
+            } 
+        } 
+    }
+}
+function analyzeTextForTag(text) { const lower = text.toLowerCase(); for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) return tag; } return null; }
+
+// WALK & TALK
+let walkRecognition = null; let isWalkSessionActive = false;
+window.openWalkTalk = () => document.getElementById('walk-talk-modal').classList.add('open');
+window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
+window.toggleWalkSession = () => { if(isWalkSessionActive) stopWalkSession(); else startWalkSession(); };
+function startWalkSession() {
+    if (!('webkitSpeechRecognition' in window)) { alert("No speech support"); return; }
+    isWalkSessionActive = true; document.getElementById('walk-mic-btn').classList.add('active'); document.getElementById('walk-status').innerText = "Ascolto...";
+    walkRecognition = new webkitSpeechRecognition(); walkRecognition.continuous = false; walkRecognition.lang = 'it-IT';
+    walkRecognition.onresult = (e) => {
+        const t = e.results[0][0].transcript; document.getElementById('walk-transcript').innerText = t;
+        const time = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+        document.getElementById('editor').innerHTML += `<div style="margin-top:10px;"><b>🗣️ Walk (${time}):</b> ${t}</div>`;
+        saveData(); setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 1500);
+    };
+    walkRecognition.start();
+}
+function stopWalkSession() { isWalkSessionActive = false; document.getElementById('walk-mic-btn').classList.remove('active'); document.getElementById('walk-status').innerText = "Stop"; if(walkRecognition) walkRecognition.stop(); }
+
+// SIMPLE DICTATION
+let timeout;
+let recognition = null; if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => document.getElementById('mic-btn').classList.add('recording'); recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording'); recognition.onresult = (e) => { let final = ''; for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) final += e.results[i][0].transcript; } if (final) { document.execCommand('insertText', false, final + " "); saveData(); } }; }
+window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("No support"); };
+
+// STATS & CHARTS
+window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); renderChart(); };
+function renderChart() { 
+    const ctx = document.getElementById('chartCanvas').getContext('2d'); 
+    if(window.myChart) window.myChart.destroy(); 
+    window.myChart = new Chart(ctx, { 
+        type:'bar', 
+        data:{
+            labels:['Mese Corrente'], 
+            datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]
+        }, 
+        options:{
+            plugins:{legend:{display:false}}, 
+            scales:{x:{display:false}, y:{grid:{color:'#333'}}}
+        } 
+    }); 
+}
+
+// FORMATTING & MEDIA
+window.document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
+window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
 window.triggerImageUpload = () => document.getElementById('img-input').click();
 window.handleImageUpload = (input) => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const scale = 600 / img.width; c.width = 600; c.height = img.height * scale; ctx.drawImage(img, 0, 0, c.width, c.height); document.execCommand('insertHTML', false, `<img src="${c.toDataURL('image/jpeg', 0.7)}"><br>`); saveData(); }; }; reader.readAsDataURL(file); };
 window.toggleTheme = () => { document.body.classList.toggle('light-mode'); localStorage.setItem('theme', document.body.classList.contains('light-mode')?'light':'dark'); };
 window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${currentDateString}.html`; a.click(); };
-window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
-let timeout;
+window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
