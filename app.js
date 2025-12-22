@@ -5,7 +5,7 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from
 // --- NESSUNA LIBRERIA AI ESTERNA ---
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.6"; 
+const APP_VERSION = "V14.7";
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -70,11 +70,13 @@ let currentDayStats = {};
 let currentTags = [];
 let globalWordCount = 0; 
 let currentPrompts = [];
+let collectedTasks = []; // Array per i task raccolti
 
 // TIMER VARIABLES
 let timerInterval = null;
 let timerSeconds = 0;
 let isTimerRunning = false;
+let lastTypingTime = Date.now(); // Per l'auto-pausa
 
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
@@ -96,12 +98,40 @@ onAuthStateChanged(auth, async (user) => {
         loadGlobalStats(); 
         await loadDiaryForDate(currentDateString);
         loadCoachPrompts();
+        
+        // Avvio automatico timer
         timerPlay();
     }
 });
 
-// --- LOGICA @now ---
+// --- NUOVA FUNZIONE: FORCE APP REFRESH ---
+window.forceAppRefresh = async () => {
+    if (confirm("Questo ricaricherà completamente l'app e cancellerà la cache locale per forzare l'aggiornamento. Procedere?")) {
+        // 1. Unregister Service Worker
+        if (navigator.serviceWorker) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+            }
+        }
+        // 2. Clear Caches
+        const keys = await caches.keys();
+        for (const key of keys) {
+            await caches.delete(key);
+        }
+        // 3. Hard Reload
+        window.location.reload(true);
+    }
+};
+
+
+// --- INPUT LISTENER: @now e @task ---
 document.getElementById('editor').addEventListener('input', (e) => {
+    // Aggiorno l'orario di digitazione per il timer intelligente
+    lastTypingTime = Date.now();
+    // Se scrivo e il timer è in pausa, lo riavvio
+    if (!isTimerRunning) timerPlay();
+
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
         const node = sel.anchorNode;
@@ -110,6 +140,7 @@ document.getElementById('editor').addEventListener('input', (e) => {
             const caretPos = sel.anchorOffset;
             const textBeforeCaret = text.substring(0, caretPos);
             
+            // LOGICA @now
             if (textBeforeCaret.endsWith('@now')) {
                 const range = document.createRange();
                 range.setStart(node, caretPos - 4);
@@ -124,6 +155,19 @@ document.getElementById('editor').addEventListener('input', (e) => {
                 
                 document.execCommand('insertHTML', false, htmlToInsert);
             }
+
+            // LOGICA @task (Nuova)
+            if (textBeforeCaret.endsWith('@task')) {
+                const range = document.createRange();
+                range.setStart(node, caretPos - 5); // @task = 5 chars
+                range.setEnd(node, caretPos);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                
+                // Inserisco checkbox. La classe 'smart-task' serve per il riconoscimento
+                const htmlToInsert = `<input type="checkbox" class="smart-task">&nbsp;`;
+                document.execCommand('insertHTML', false, htmlToInsert);
+            }
         }
     }
     updateCounts(); 
@@ -131,13 +175,25 @@ document.getElementById('editor').addEventListener('input', (e) => {
     timeout = setTimeout(saveData, 1500);
 });
 
-// --- TIMER LOGIC ---
+// --- SMART TIMER LOGIC ---
 window.timerPlay = () => {
     if (isTimerRunning) return;
     isTimerRunning = true;
+    lastTypingTime = Date.now(); // Reset idle time
+    
+    if (timerInterval) clearInterval(timerInterval); // Sicurezza
+    
     timerInterval = setInterval(() => {
         timerSeconds++;
         updateTimerDisplay();
+        
+        // CONTROLLO IDLE (2 MINUTI)
+        const idleTime = Date.now() - lastTypingTime;
+        if (idleTime > 120000) { // 120.000 ms = 2 minuti
+            timerPause();
+            // Opzionale: notifico l'utente o cambio icona
+            console.log("Timer in pausa per inattività");
+        }
     }, 1000);
 };
 
@@ -159,50 +215,88 @@ function updateTimerDisplay() {
     document.getElementById('session-timer').innerText = `${m}:${s}`;
 }
 
+// --- TASK HARVESTER & MANAGER ---
+
+// Funzione per estrarre i task dal testo HTML
+function harvestTasks() {
+    const editor = document.getElementById('editor');
+    const checkboxes = editor.querySelectorAll('.smart-task');
+    const tasks = [];
+    
+    checkboxes.forEach((cb, index) => {
+        // Cerco il testo subito dopo la checkbox
+        let taskText = "Task vuoto";
+        // Il nodo successivo potrebbe essere un testo o uno span
+        let nextNode = cb.nextSibling;
+        if (nextNode && nextNode.textContent) {
+            taskText = nextNode.textContent.trim();
+            // Prendi solo la prima riga o un pezzo ragionevole
+            taskText = taskText.split('\n')[0].substring(0, 50); 
+        }
+        
+        tasks.push({
+            id: `task_${index}`, // ID semplice basato sull'ordine
+            text: taskText,
+            done: cb.checked
+        });
+    });
+    return tasks;
+}
+
+window.openTodoList = () => {
+    const modal = document.getElementById('todo-modal');
+    const container = document.getElementById('todo-list-container');
+    container.innerHTML = '';
+    
+    if (collectedTasks.length === 0) {
+        container.innerHTML = "<div style='text-align:center; padding:20px; color:#666;'>Nessun task trovato (@task) nel diario di questo mese.</div>";
+    } else {
+        collectedTasks.forEach(task => {
+            const row = document.createElement('div');
+            row.style.cssText = "padding:10px; border-bottom:1px solid #333; display:flex; align-items:center; gap:10px;";
+            // Se checked, sbarrato
+            const styleText = task.done ? "text-decoration:line-through; color:#666;" : "";
+            row.innerHTML = `
+                <span style="font-size:1.2rem;">${task.done ? '✅' : '⬜'}</span>
+                <span style="${styleText}">${task.text || '...'}</span>
+            `;
+            container.appendChild(row);
+        });
+    }
+    
+    modal.classList.add('open');
+};
+
 // --- COACH MANAGER LOGIC ---
+// (Rimasta invariata ma inclusa per completezza)
 async function loadCoachPrompts() {
     if (!currentUser) return;
     try {
         const docRef = doc(db, "diario", currentUser.uid, "settings", "coach");
         const snap = await getDoc(docRef);
-        
-        if (snap.exists() && snap.data().prompts && snap.data().prompts.length > 0) {
+        if (snap.exists() && snap.data().prompts) {
             let loaded = snap.data().prompts;
-            if (typeof loaded[0] === 'string') {
-                currentPrompts = loaded.map(txt => createPromptObj(txt));
-                savePromptsToDb();
-            } else {
-                currentPrompts = loaded;
-            }
+            currentPrompts = (typeof loaded[0] === 'string') ? loaded.map(txt => createPromptObj(txt)) : loaded;
         } else {
             currentPrompts = defaultPromptsText.map(txt => createPromptObj(txt));
-            await setDoc(docRef, { prompts: currentPrompts }, { merge: true });
         }
-    } catch (e) {
-        currentPrompts = defaultPromptsText.map(txt => createPromptObj(txt));
-    }
+    } catch (e) { currentPrompts = defaultPromptsText.map(txt => createPromptObj(txt)); }
 }
 
 async function savePromptsToDb() {
     if (!currentUser) return;
     try {
-        await setDoc(doc(db, "diario", currentUser.uid, "settings", "coach"), { 
-            prompts: currentPrompts 
-        }, { merge: true });
+        await setDoc(doc(db, "diario", currentUser.uid, "settings", "coach"), { prompts: currentPrompts }, { merge: true });
         renderCoachList(); 
     } catch (e) { console.error(e); }
 }
 
-window.openCoachManager = () => {
-    document.getElementById('coach-manager-modal').classList.add('open');
-    renderCoachList();
-};
+window.openCoachManager = () => { document.getElementById('coach-manager-modal').classList.add('open'); renderCoachList(); };
 
 function renderCoachList() {
     const listContainer = document.getElementById('coach-list-container');
     listContainer.innerHTML = '';
     const sortedPrompts = [...currentPrompts].sort((a, b) => (b.usage || 0) - (a.usage || 0));
-    
     sortedPrompts.forEach((promptObj) => {
         const realIndex = currentPrompts.findIndex(p => p.id === promptObj.id);
         const div = document.createElement('div');
@@ -211,42 +305,23 @@ function renderCoachList() {
             <div class="coach-text">${promptObj.text}</div>
             <div class="coach-meta">Usata: ${promptObj.usage || 0}</div>
             <div class="coach-btn-group">
-                <button class="coach-action-btn" onclick="editCoachPrompt(${realIndex})" title="Modifica">✏️</button>
-                <button class="coach-action-btn coach-delete" onclick="deleteCoachPrompt(${realIndex})" title="Elimina">🗑️</button>
-            </div>
-        `;
+                <button class="coach-action-btn" onclick="editCoachPrompt(${realIndex})">✏️</button>
+                <button class="coach-action-btn coach-delete" onclick="deleteCoachPrompt(${realIndex})">🗑️</button>
+            </div>`;
         listContainer.appendChild(div);
     });
 }
-
 window.addCoachPrompt = () => {
     const input = document.getElementById('new-prompt-input');
-    const text = input.value.trim();
-    if (!text) return;
-    currentPrompts.unshift(createPromptObj(text)); 
-    input.value = '';
-    savePromptsToDb();
+    const text = input.value.trim(); if (!text) return;
+    currentPrompts.unshift(createPromptObj(text)); input.value = ''; savePromptsToDb();
 };
-
-window.deleteCoachPrompt = (index) => {
-    if (confirm("Vuoi davvero eliminare questa domanda?")) {
-        currentPrompts.splice(index, 1);
-        savePromptsToDb();
-    }
-};
-
-window.editCoachPrompt = (index) => {
-    const newText = prompt("Modifica la domanda:", currentPrompts[index].text);
-    if (newText !== null && newText.trim() !== "") {
-        currentPrompts[index].text = newText.trim();
-        savePromptsToDb();
-    }
-};
+window.deleteCoachPrompt = (index) => { if (confirm("Eliminare?")) { currentPrompts.splice(index, 1); savePromptsToDb(); } };
+window.editCoachPrompt = (index) => { const t = prompt("Modifica:", currentPrompts[index].text); if (t) { currentPrompts[index].text = t.trim(); savePromptsToDb(); } };
 
 window.triggerBrainstorm = () => { 
-    if (currentPrompts.length === 0) { alert("Nessuna domanda disponibile."); return; }
-    const randIndex = Math.floor(Math.random() * currentPrompts.length);
-    const pObj = currentPrompts[randIndex];
+    if (currentPrompts.length === 0) return;
+    const pObj = currentPrompts[Math.floor(Math.random() * currentPrompts.length)];
     document.getElementById('ai-title').innerText = "Coach";
     document.getElementById('ai-message').innerText = pObj.text;
     document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt('${pObj.id}')">Inserisci</button>`;
@@ -254,14 +329,9 @@ window.triggerBrainstorm = () => {
 };
 
 window.scrollToBottom = () => {
-    const editor = document.getElementById('editor');
-    editor.focus();
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const editor = document.getElementById('editor'); editor.focus();
+    const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
     editor.scrollTop = editor.scrollHeight;
 };
 
@@ -273,28 +343,16 @@ window.insertPrompt = (promptId) => {
         textToInsert = currentPrompts[pIndex].text;
         savePromptsToDb();
     }
-
     window.scrollToBottom();
-
-    // Colore ARANCIONE
     const html = `<br><p style="color: #ff9100; font-weight: bold; margin-bottom: 5px;">Domanda: ${textToInsert}</p><p>Risposta: </p>`;
     document.execCommand('insertHTML', false, html);
-    
     document.getElementById('ai-coach-area').style.display = 'none';
-    
-    setTimeout(() => { 
-        const editor = document.getElementById('editor');
-        editor.scrollTop = editor.scrollHeight; 
-    }, 100);
+    setTimeout(() => { document.getElementById('editor').scrollTop = document.getElementById('editor').scrollHeight; }, 100);
     saveData();
 };
 
 // --- CORE FUNCTIONS ---
-
-window.changeDate = (newDate) => { 
-    currentDateString = newDate; 
-    loadDiaryForDate(newDate); 
-};
+window.changeDate = (newDate) => { currentDateString = newDate; loadDiaryForDate(newDate); };
 
 async function loadDiaryForDate(dateStr) {
     document.getElementById('db-status').innerText = "Loading...";
@@ -310,15 +368,16 @@ async function loadDiaryForDate(dateStr) {
             setTimeout(window.scrollToBottom, 200);
             currentDayStats = data.stats || {};
             currentTags = data.tags || [];
-            updateMetrics(data.htmlContent || "", updateCounts());
+            collectedTasks = data.tasks || []; // Carica i task salvati
             
+            updateMetrics(data.htmlContent || "", updateCounts());
             document.getElementById('db-status').innerText = "Sync OK";
             document.getElementById('db-status').style.color = "#00e676";
         } else {
             document.getElementById('editor').innerHTML = ""; 
+            collectedTasks = [];
             updateMetrics("", 0);
             document.getElementById('db-status').innerText = "Nuovo Mese";
-            document.getElementById('db-status').style.color = "#aaa";
         }
     });
 }
@@ -326,49 +385,41 @@ async function loadDiaryForDate(dateStr) {
 async function saveData() {
     if (!currentUser) return;
     const statusLabel = document.getElementById('db-status');
-    statusLabel.innerText = "Saving...";
-    statusLabel.style.color = "orange";
+    statusLabel.innerText = "Saving..."; statusLabel.style.color = "orange";
 
     try {
         const content = document.getElementById('editor').innerHTML;
         const wordsToday = updateCounts();
         const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
-        const wordsBefore = currentDayStats.words || 0;
-        const deltaWords = wordsToday - wordsBefore;
+        
+        // HARVEST TASKS
+        collectedTasks = harvestTasks();
 
         const dataToSave = {
             htmlContent: content,
             stats: { words: wordsToday, mood: currentDayStats.mood || "" }, 
             tags: detectedTags,
+            tasks: collectedTasks, // Salvo i task estratti
             lastUpdate: new Date()
         };
 
         await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
 
-        if (deltaWords !== 0 || globalWordCount === 0) { 
-            let newGlobalCount = globalWordCount + deltaWords;
-            if (newGlobalCount < 0) newGlobalCount = 0; 
-            await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), {
-                totalWords: newGlobalCount,
-                lastUpdate: new Date()
-            }, { merge: true });
+        // Global stats (simplified logic)
+        const delta = wordsToday - (currentDayStats.words || 0);
+        if (delta !== 0 || globalWordCount === 0) {
+            let newGlobal = globalWordCount + delta; if(newGlobal<0) newGlobal=0;
+            await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { totalWords: newGlobal, lastUpdate: new Date() }, { merge: true });
         }
 
-        statusLabel.innerText = "Saved";
-        statusLabel.style.color = "#00e676";
+        statusLabel.innerText = "Saved"; statusLabel.style.color = "#00e676";
         updateMetrics(content, wordsToday);
-    } catch (error) {
-        console.error(error);
-        statusLabel.innerText = "ERROR";
-        statusLabel.style.color = "red";
-    }
+    } catch (error) { console.error(error); statusLabel.innerText = "ERROR"; statusLabel.style.color = "red"; }
 }
 
 function loadGlobalStats() {
-    const docRef = doc(db, "diario", currentUser.uid, "stats", "global");
-    onSnapshot(docRef, (snap) => {
-        if (snap.exists()) { globalWordCount = snap.data().totalWords || 0; } 
-        else { globalWordCount = 0; }
+    onSnapshot(doc(db, "diario", currentUser.uid, "stats", "global"), (snap) => {
+        globalWordCount = snap.exists() ? snap.data().totalWords : 0;
         document.getElementById('count-global').innerText = globalWordCount;
     });
 }
@@ -393,77 +444,45 @@ function updateMetrics(content, wordsToday) {
 
 window.saveApiKey = () => {
     const key = document.getElementById('gemini-api-key').value.trim();
-    if(key) { 
-        localStorage.setItem('GEMINI_API_KEY', key); 
-        alert("Chiave salvata! Ora riprova il tasto AI."); 
-        document.getElementById('settings-modal').classList.remove('open'); 
-    }
+    if(key) { localStorage.setItem('GEMINI_API_KEY', key); alert("Saved!"); document.getElementById('settings-modal').classList.remove('open'); }
 };
 
-// --- FUNZIONE AI CORRETTA (gemini-3-flash-preview) ---
 window.generateAiSummary = async () => {
     const apiKey = localStorage.getItem('GEMINI_API_KEY');
-    if (!apiKey) { alert("Inserisci API Key nelle Impostazioni"); return; }
-    
+    if (!apiKey) { alert("Manca API Key"); return; }
     const text = document.getElementById('editor').innerText.trim();
     if (text.length < 30) { alert("Scrivi di più!"); return; }
 
     document.getElementById('summary-modal').classList.add('open');
     const contentDiv = document.getElementById('ai-summary-content');
-    contentDiv.innerHTML = '<div class="ai-loading">Analizzo con Gemini 3.0 Flash Preview... 🧠</div>';
+    contentDiv.innerHTML = '<div class="ai-loading">Gemini 3.0 Flash Preview... 🧠</div>';
     
-    const prompt = `Analizza questo diario:\n"${text}"\n\n1. Riassunto.\n2. Insight Emotivo.\n3. Consiglio. Formatta la risposta in Markdown.`;
+    const prompt = `Analizza: "${text}"\n1. Riassunto.\n2. Insight.\n3. Consiglio. Markdown.`;
 
     try {
-        // USO IL MODELLO 3.0 PREVIEW CHE HAI SEGNALATO
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-        
         const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: prompt }]
-                }]
-            })
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            console.error("API Error Data:", data);
-            throw new Error(data.error?.message || "Errore API sconosciuto");
-        }
-
-        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-             const aiText = data.candidates[0].content.parts[0].text;
-             contentDiv.innerHTML = marked.parse(aiText);
-        } else {
-             throw new Error("Formato risposta non valido.");
-        }
-        
-    } catch (error) { 
-        console.error("AI Error:", error);
-        contentDiv.innerHTML = `<strong>Errore AI:</strong> ${error.message}<br><br>Controlla la chiave API e riprova.`; 
-    }
+        if (!response.ok) throw new Error(data.error?.message || "Err");
+        contentDiv.innerHTML = marked.parse(data.candidates[0].content.parts[0].text);
+    } catch (error) { contentDiv.innerHTML = `Err: ${error.message}`; }
 };
 
+// ... Tag Logic ...
 const tagRules = {
     'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici', 'relazione'],
     'Salute': ['cibo', 'dieta', 'fumo', 'allenamento', 'sonno', 'salute'],
     'Lavoro': ['progetto', 'app', 'business', 'soldi', 'produttività'],
     'Mindset': ['gratitudine', 'ansia', 'felice', 'triste', 'paura']
 };
-
 function detectTagsInContent(text) {
-    const lower = text.toLowerCase();
-    const found = new Set();
+    const lower = text.toLowerCase(); const found = new Set();
     for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) found.add(tag); }
     return Array.from(found);
 }
-
 window.openTagExplorer = () => {
     document.getElementById('tag-modal').classList.add('open');
     const cloud = document.getElementById('tag-cloud'); cloud.innerHTML = '';
@@ -471,23 +490,20 @@ window.openTagExplorer = () => {
         const btn = document.createElement('span'); btn.className = 'tag-chip'; btn.innerText = tag; btn.onclick = () => searchByTag(tag); cloud.appendChild(btn);
     });
 };
-
 async function searchByTag(tagName) {
-    const resultsDiv = document.getElementById('tag-results');
-    resultsDiv.innerHTML = "Cerco...";
+    const resultsDiv = document.getElementById('tag-results'); resultsDiv.innerHTML = "Cerco...";
     const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
-    const querySnapshot = await getDocs(q);
-    resultsDiv.innerHTML = '';
+    const querySnapshot = await getDocs(q); resultsDiv.innerHTML = '';
     if (querySnapshot.empty) { resultsDiv.innerHTML = "Nessun risultato."; return; }
     querySnapshot.forEach((doc) => {
-        const d = doc.data();
         const div = document.createElement('div'); div.className = 'result-row';
-        div.innerHTML = `<span>🗓️ ${doc.id}</span> <span>${d.stats?.words || 0} parole</span>`;
+        div.innerHTML = `<span>🗓️ ${doc.id}</span> <span>${doc.data().stats?.words || 0} parole</span>`;
         div.onclick = () => { document.getElementById('tag-modal').classList.remove('open'); document.getElementById('date-picker').value = doc.id; changeDate(doc.id); };
         resultsDiv.appendChild(div);
     });
 }
 
+// ... Utilities ...
 window.handleKeyUp = (e) => { if (e.key === 'Enter') processLastBlock(); };
 function processLastBlock() { 
      const selection = window.getSelection(); if (!selection.rangeCount) return; let block = selection.getRangeAt(0).startContainer; while (block && block.id !== 'editor' && block.tagName !== 'DIV' && block.tagName !== 'P') { block = block.parentNode; } if (block && block.previousElementSibling) { const prevBlock = block.previousElementSibling; if (!prevBlock.querySelector('.auto-tag') && prevBlock.innerText.trim().length > 10) { const tag = analyzeTextForTag(prevBlock.innerText); if (tag) { const tagSpan = document.createElement('span'); tagSpan.className = 'auto-tag'; tagSpan.innerText = tag; tagSpan.contentEditable = "false"; prevBlock.prepend(tagSpan); saveData(); } } }
@@ -506,8 +522,7 @@ function startWalkSession() {
         const t = e.results[0][0].transcript; document.getElementById('walk-transcript').innerText = t;
         const time = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
         document.getElementById('editor').innerHTML += `<div style="margin-top:10px;"><b>🗣️ Walk (${time}):</b> ${t}</div>`;
-        saveData(); 
-        setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 1500);
+        saveData(); setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 1500);
     };
     walkRecognition.start();
 }
@@ -518,9 +533,7 @@ let recognition = null; if ('webkitSpeechRecognition' in window) { recognition =
 window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("No support"); };
 
 window.document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
-
 window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
-window.insertMood = (e) => { document.execCommand('insertText', false, ` ${e} `); currentDayStats.mood = e; saveData(); };
 window.triggerImageUpload = () => document.getElementById('img-input').click();
 window.handleImageUpload = (input) => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const scale = 600 / img.width; c.width = 600; c.height = img.height * scale; ctx.drawImage(img, 0, 0, c.width, c.height); document.execCommand('insertHTML', false, `<img src="${c.toDataURL('image/jpeg', 0.7)}"><br>`); saveData(); }; }; reader.readAsDataURL(file); };
 

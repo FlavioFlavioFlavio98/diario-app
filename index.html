@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V14.6</title>
+    <title>Diario V14.7</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -32,6 +32,8 @@
                 <div id="app-version-display" style="font-size:0.7rem; color:#666; font-weight:bold; margin-right:auto; margin-left:10px;"></div>
 
                 <div style="display:flex; gap:5px; align-items:center;">
+                    <button class="tool-btn" onclick="openTodoList()" title="Lista Task"><span class="material-icons-round" style="color:#00e676;">check_circle</span></button>
+                    
                     <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
                     <button class="tool-btn" onclick="openCoachManager()" title="Gestisci Coach"><span class="material-icons-round">menu_book</span></button>
                     <button class="tool-btn" onclick="openStats()" title="Stats"><span class="material-icons-round">bar_chart</span></button>
@@ -63,14 +65,7 @@
             <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
             <button class="tool-btn" id="mic-btn" onclick="toggleDictation()"><span class="material-icons-round">mic</span></button>
             
-            <div class="mood-bar">
-                <button class="mood-btn" onclick="insertMood('😄')">😄</button>
-                <button class="mood-btn" onclick="insertMood('😐')">😐</button>
-                <button class="mood-btn" onclick="insertMood('😔')">😔</button>
-                <button class="mood-btn" onclick="insertMood('😡')">😡</button>
-                <button class="mood-btn" onclick="insertMood('💡')">💡</button>
             </div>
-        </div>
         
         <div id="metrics-bar">
             <div class="metric-item" style="min-width: 140px;">
@@ -100,6 +95,17 @@
         </main>
     </div>
 
+    <div id="todo-modal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>To-Do List 📝</h2>
+                <button onclick="document.getElementById('todo-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
+            </div>
+            <p style="font-size:0.8rem; color:#888;">Questi task sono letti direttamente dal tuo diario mensile.</p>
+            <div id="todo-list-container"></div>
+        </div>
+    </div>
+
     <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
     <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
@@ -126,6 +132,9 @@
             <div style="display:flex; justify-content:space-between;"><h2>Opzioni</h2><button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div>
             <div style="margin-top:20px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
             <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
+            
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px; background:#ff5252; color:white; border:none;" onclick="forceAppRefresh()">🔄 Aggiorna App (Fix Mobile)</button></div>
+            
             <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
             <h3>🤖 Google Gemini AI</h3>
             <input type="password" id="gemini-api-key" placeholder="Incolla AIzaSy..." style="width:100%; padding:10px; margin-top:5px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:5px;">
@@ -133,6 +142,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=14.6"></script>
+    <script type="module" src="app.js?v=14.7"></script>
 </body>
 </html>
