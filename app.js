@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, o
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.8 Full";
+const APP_VERSION = "V15.0 Final";
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -69,7 +69,10 @@ let currentTags = [];
 let globalWordCount = 0; 
 let currentPrompts = [];
 let collectedTasks = [];
-let isLocalChange = false; // FLAG CRITICO PER EVITARE REFRESH CURSORE
+let isLocalChange = false; // FLAG CRITICO
+
+// CHAT VARIABLES
+let chatHistory = [];
 
 // TRIP MODE VARIABLES
 let tripInterval = null;
@@ -90,7 +93,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-pic').src = user.photoURL;
         document.getElementById('date-picker').value = currentDateString;
         
-        loadSettings(); // Carica Font/Size
+        loadSettings(); // Font e Grandezza
         
         const savedKey = localStorage.getItem('GEMINI_API_KEY');
         if(savedKey) { document.getElementById('gemini-api-key').value = savedKey; }
@@ -109,7 +112,6 @@ function loadSettings() {
     document.documentElement.style.setProperty('--editor-font', font);
     document.documentElement.style.setProperty('--editor-size', size);
     
-    // Aggiorna UI dropdown se esistono
     const fontSel = document.getElementById('font-family-select');
     const sizeSel = document.getElementById('font-size-select');
     if(fontSel) fontSel.value = font;
@@ -127,7 +129,7 @@ window.changeEditorSize = (val) => {
 };
 
 window.forceAppRefresh = async () => {
-    if (confirm("Reset completo e aggiornamento?")) {
+    if (confirm("Sei sicuro? Questo cancellerà la cache locale e ricaricherà l'ultima versione dell'app.")) {
         if (navigator.serviceWorker) {
             const regs = await navigator.serviceWorker.getRegistrations();
             for (let reg of regs) await reg.unregister();
@@ -139,9 +141,10 @@ window.forceAppRefresh = async () => {
 };
 
 // --- FIX CURSORE & CHECKBOX LISTENER ---
+// Questo evita che il salvataggio ricarichi l'HTML e sposti il cursore
 document.getElementById('editor').addEventListener('click', (e) => {
     if (e.target.classList.contains('smart-task')) {
-        // Toggle manuale attributo DOM per persistenza visiva immediata
+        // Toggle manuale attributo DOM
         if (e.target.hasAttribute('checked')) {
             e.target.removeAttribute('checked');
             e.target.checked = false; 
@@ -150,17 +153,14 @@ document.getElementById('editor').addEventListener('click', (e) => {
             e.target.checked = true; 
         }
         
-        // Segnala che è una modifica locale per bloccare onSnapshot
         isLocalChange = true;
         saveData();
-        
-        // Dopo un po' resettiamo il flag
         setTimeout(() => isLocalChange = false, 2000);
     }
 });
 
 document.getElementById('editor').addEventListener('input', (e) => {
-    isLocalChange = true; // Stiamo scrivendo, non ricaricare
+    isLocalChange = true; 
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
         const node = sel.anchorNode;
@@ -203,7 +203,7 @@ document.getElementById('editor').addEventListener('input', (e) => {
     clearTimeout(timeout); 
     timeout = setTimeout(() => {
         saveData();
-        isLocalChange = false; // Reset dopo il salvataggio
+        isLocalChange = false; 
     }, 1500);
 });
 
@@ -213,7 +213,6 @@ window.tripStart = () => {
     isTripRunning = true;
     tripStartTime = Date.now() - (tripSeconds * 1000); // Riprendi da dove eri
     tripStartWordCount = parseInt(document.getElementById('count-today').innerText); // Base attuale
-    
     if (tripInterval) clearInterval(tripInterval);
     tripInterval = setInterval(updateTripUI, 1000);
 };
@@ -260,9 +259,8 @@ function harvestTasks() {
         if (nextNode && nextNode.textContent) {
             taskText = nextNode.textContent.trim().split('\n')[0].substring(0, 50); 
         }
-        
         tasks.push({
-            id: cb.id, // ID univoco salvato nel DOM
+            id: cb.id,
             text: taskText,
             done: cb.checked
         });
@@ -283,6 +281,7 @@ window.toggleTaskFromModal = (taskId, isChecked) => {
             checkbox.checked = false;
         }
         saveData();
+        // Aggiorna la lista dopo poco
         setTimeout(window.openTodoList, 100); 
     }
 };
@@ -292,8 +291,11 @@ window.openTodoList = () => {
     const container = document.getElementById('todo-list-container');
     container.innerHTML = '';
     
+    // FIX LISTA VUOTA: Harvest Immediato dal DOM, non dal DB
+    collectedTasks = harvestTasks(); 
+    
     if (collectedTasks.length === 0) {
-        container.innerHTML = "<div style='text-align:center; padding:20px; color:#666;'>Nessun task trovato.</div>";
+        container.innerHTML = "<div style='text-align:center; padding:20px; color:#666;'>Nessun task trovato. Usa @task nel testo.</div>";
     } else {
         collectedTasks.forEach(task => {
             const row = document.createElement('div');
@@ -317,7 +319,100 @@ window.openTodoList = () => {
     modal.classList.add('open');
 };
 
-// --- COACH MANAGER LOGIC ---
+// --- CHAT DI ANALISI PROFONDA ---
+window.openAnalysisChat = () => {
+    const editorText = document.getElementById('editor').innerText;
+    if(editorText.length < 50) { alert("Scrivi di più prima di analizzare!"); return; }
+    
+    document.getElementById('chat-modal').classList.add('open');
+    const container = document.getElementById('chat-history-container');
+    container.innerHTML = '';
+    
+    // Reset e Init Storia
+    chatHistory = [
+        {
+            role: "user",
+            parts: [{ text: `Agisci come un coach empatico e psicologico. Analizza: "${editorText}". Fai domande brevi e profonde per aiutarmi a riflettere. Sii umano.` }]
+        }
+    ];
+
+    sendChatRequest(); // Start automatico
+};
+
+window.closeAnalysisChat = () => { document.getElementById('chat-modal').classList.remove('open'); };
+
+window.sendChatMessage = () => {
+    const input = document.getElementById('chat-user-input');
+    const text = input.value.trim();
+    if(!text) return;
+    
+    renderChatMessage(text, 'user');
+    input.value = '';
+
+    chatHistory.push({ role: "user", parts: [{ text: text }] });
+    sendChatRequest();
+};
+
+async function sendChatRequest() {
+    const loading = document.getElementById('chat-loading');
+    const apiKey = localStorage.getItem('GEMINI_API_KEY');
+    if (!apiKey) { alert("Manca API Key"); return; }
+    
+    loading.style.display = 'block';
+
+    try {
+        // USO GEMINI 3.0 FLASH PREVIEW COME RICHIESTO
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: chatHistory })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Errore API");
+
+        const aiResponseText = data.candidates[0].content.parts[0].text;
+        
+        chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
+        renderChatMessage(aiResponseText, 'model');
+
+    } catch (e) {
+        renderChatMessage("Errore: " + e.message, 'model');
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+function renderChatMessage(text, role) {
+    const container = document.getElementById('chat-history-container');
+    const div = document.createElement('div');
+    div.className = `chat-message ${role === 'user' ? 'chat-user' : 'chat-ai'}`;
+    div.innerHTML = marked.parse(text); 
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+window.saveChatToNote = () => {
+    let htmlToAppend = "<br><hr><h3>🧠 Sessione di Analisi</h3>";
+    for (let i = 1; i < chatHistory.length; i++) {
+        const msg = chatHistory[i];
+        const text = msg.parts[0].text;
+        if(msg.role === 'model') {
+            htmlToAppend += `<p style="color:#ff9100; margin-bottom:5px;"><b>Coach:</b> ${text}</p>`;
+        } else {
+            htmlToAppend += `<p style="margin-bottom:5px;"><b>Io:</b> ${text}</p>`;
+        }
+    }
+    htmlToAppend += "<hr><br>";
+    
+    window.closeAnalysisChat();
+    window.scrollToBottom();
+    document.execCommand('insertHTML', false, htmlToAppend);
+    saveData();
+};
+
+// --- COACH MANAGER ---
 async function loadCoachPrompts() {
     if (!currentUser) return;
     try {
@@ -337,55 +432,22 @@ function renderCoachList() { const c = document.getElementById('coach-list-conta
 window.addCoachPrompt = () => { const i=document.getElementById('new-prompt-input'); const t=i.value.trim(); if(!t)return; currentPrompts.unshift(createPromptObj(t)); i.value=''; savePromptsToDb(); };
 window.deleteCoachPrompt = (i) => { if(confirm("Eliminare?")) { currentPrompts.splice(i,1); savePromptsToDb(); } };
 window.editCoachPrompt = (i) => { const t=prompt("Modifica:", currentPrompts[i].text); if(t) { currentPrompts[i].text=t.trim(); savePromptsToDb(); } };
+window.triggerBrainstorm = () => { if(currentPrompts.length===0) return; const p=currentPrompts[Math.floor(Math.random()*currentPrompts.length)]; document.getElementById('ai-title').innerText="Coach"; document.getElementById('ai-message').innerText=p.text; document.getElementById('ai-actions').innerHTML=`<button class="ai-btn-small" onclick="insertPrompt('${p.id}')">Inserisci</button>`; document.getElementById('ai-coach-area').style.display='block'; };
+window.scrollToBottom = () => { const e=document.getElementById('editor'); e.focus(); const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); e.scrollTop=e.scrollHeight; };
+window.insertPrompt = (id) => { const i=currentPrompts.findIndex(p=>p.id==id); let t="Domanda..."; if(i>-1){ currentPrompts[i].usage=(currentPrompts[i].usage||0)+1; t=currentPrompts[i].text; savePromptsToDb(); } window.scrollToBottom(); document.execCommand('insertHTML',false,`<br><p style="color:#ff9100;font-weight:bold;margin-bottom:5px;">Domanda: ${t}</p><p>Risposta: </p>`); document.getElementById('ai-coach-area').style.display='none'; setTimeout(()=>{document.getElementById('editor').scrollTop=document.getElementById('editor').scrollHeight;},100); saveData(); };
 
-window.triggerBrainstorm = () => { 
-    if (currentPrompts.length === 0) return;
-    const p = currentPrompts[Math.floor(Math.random() * currentPrompts.length)];
-    document.getElementById('ai-title').innerText = "Coach";
-    document.getElementById('ai-message').innerText = p.text;
-    document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt('${p.id}')">Inserisci</button>`;
-    document.getElementById('ai-coach-area').style.display = 'block';
-};
-
-window.scrollToBottom = () => { 
-    const e = document.getElementById('editor'); e.focus(); 
-    const r = document.createRange(); r.selectNodeContents(e); r.collapse(false); 
-    window.getSelection().removeAllRanges(); window.getSelection().addRange(r); 
-    e.scrollTop = e.scrollHeight; 
-};
-
-window.insertPrompt = (id) => { 
-    const i = currentPrompts.findIndex(p => p.id == id); 
-    let t = "Domanda..."; 
-    if (i > -1) { 
-        currentPrompts[i].usage = (currentPrompts[i].usage || 0) + 1; 
-        t = currentPrompts[i].text; 
-        savePromptsToDb(); 
-    } 
-    window.scrollToBottom(); 
-    document.execCommand('insertHTML', false, `<br><p style="color:#ff9100;font-weight:bold;margin-bottom:5px;">Domanda: ${t}</p><p>Risposta: </p>`); 
-    document.getElementById('ai-coach-area').style.display = 'none'; 
-    setTimeout(() => { document.getElementById('editor').scrollTop = document.getElementById('editor').scrollHeight; }, 100); 
-    saveData(); 
-};
-
-// --- CORE FUNCTIONS ---
+// --- CORE ---
 window.changeDate = (d) => { currentDateString = d; loadDiaryForDate(d); };
 
 async function loadDiaryForDate(dateStr) {
     document.getElementById('db-status').innerText = "Loading...";
     const docRef = doc(db, "diario", currentUser.uid, "entries", dateStr);
-    
     onSnapshot(docRef, (snap) => {
-        // BLOCCO REFRESH SE MODIFICA LOCALE O FOCUS ATTIVO
         if (isLocalChange || (document.activeElement.id === 'editor' && document.hasFocus())) {
-            if (snap.exists()) {
-                const data = snap.data();
-                collectedTasks = data.tasks || [];
-            }
+            // Se stiamo scrivendo, non ricarichiamo l'HTML, ma aggiorniamo la lista task in background
+            if (snap.exists()) { collectedTasks = snap.data().tasks || []; }
             return; 
         }
-
         if (snap.exists()) {
             const data = snap.data();
             document.getElementById('editor').innerHTML = data.htmlContent || ""; 
@@ -396,10 +458,7 @@ async function loadDiaryForDate(dateStr) {
             document.getElementById('db-status').innerText = "Sync OK";
             document.getElementById('db-status').style.color = "#00e676";
         } else {
-            document.getElementById('editor').innerHTML = ""; 
-            collectedTasks = [];
-            updateMetrics("", 0);
-            document.getElementById('db-status').innerText = "Nuovo Mese";
+            document.getElementById('editor').innerHTML = ""; collectedTasks = []; updateMetrics("", 0); document.getElementById('db-status').innerText = "Nuovo Mese";
         }
     });
 }
@@ -408,27 +467,17 @@ async function saveData() {
     if (!currentUser) return;
     const statusLabel = document.getElementById('db-status');
     statusLabel.innerText = "Saving..."; statusLabel.style.color = "orange";
-
     try {
         const content = document.getElementById('editor').innerHTML;
         const wordsToday = updateCounts();
-        collectedTasks = harvestTasks(); // Legge task dal DOM attuale
-
-        const dataToSave = {
-            htmlContent: content,
-            stats: { words: wordsToday, mood: currentDayStats.mood || "" }, 
-            tasks: collectedTasks,
-            lastUpdate: new Date()
-        };
-
+        collectedTasks = harvestTasks(); 
+        const dataToSave = { htmlContent: content, stats: { words: wordsToday, mood: currentDayStats.mood || "" }, tasks: collectedTasks, lastUpdate: new Date() };
         await setDoc(doc(db, "diario", currentUser.uid, "entries", currentDateString), dataToSave, { merge: true });
-
         const delta = wordsToday - (currentDayStats.words || 0);
         if (delta !== 0 || globalWordCount === 0) {
             let newGlobal = globalWordCount + delta; if(newGlobal < 0) newGlobal = 0;
             await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { totalWords: newGlobal, lastUpdate: new Date() }, { merge: true });
         }
-
         statusLabel.innerText = "Saved"; statusLabel.style.color = "#00e676";
         updateMetrics(content, wordsToday);
     } catch (error) { console.error(error); statusLabel.innerText = "ERROR"; statusLabel.style.color = "red"; }
@@ -436,143 +485,47 @@ async function saveData() {
 
 function loadGlobalStats() { onSnapshot(doc(db, "diario", currentUser.uid, "stats", "global"), (s) => { globalWordCount = s.exists() ? s.data().totalWords : 0; document.getElementById('count-global').innerText = globalWordCount; }); }
 function updateCounts() { const t = document.getElementById('editor').innerText; const w = t.trim() ? t.trim().split(/\s+/).length : 0; updateMetrics(document.getElementById('editor').innerHTML, w); return w; }
-function updateMetrics(content, wordsToday) {
-    document.getElementById('count-today').innerText = wordsToday;
-    const size = new Blob([content]).size;
-    const kb = (size / 1024).toFixed(1);
-    document.getElementById('file-weight').innerText = `${kb} KB`;
-}
-
+function updateMetrics(content, wordsToday) { document.getElementById('count-today').innerText = wordsToday; const size = new Blob([content]).size; document.getElementById('file-weight').innerText = `${(size / 1024).toFixed(1)} KB`; }
 window.saveApiKey = () => { const k = document.getElementById('gemini-api-key').value.trim(); if(k) { localStorage.setItem('GEMINI_API_KEY', k); alert("Saved!"); document.getElementById('settings-modal').classList.remove('open'); } };
 
-// --- AI SUMMARY (Gemini 3.0 Flash Preview) ---
+// AI SUMMARY STATICO (Legacy)
 window.generateAiSummary = async () => {
-    const apiKey = localStorage.getItem('GEMINI_API_KEY');
-    if (!apiKey) { alert("Manca API Key"); return; }
-    const text = document.getElementById('editor').innerText.trim();
-    if (text.length < 30) { alert("Scrivi di più!"); return; }
-
+    const apiKey = localStorage.getItem('GEMINI_API_KEY'); if (!apiKey) { alert("Manca API Key"); return; }
+    const text = document.getElementById('editor').innerText.trim(); if (text.length < 30) { alert("Scrivi di più!"); return; }
     document.getElementById('summary-modal').classList.add('open');
-    const contentDiv = document.getElementById('ai-summary-content');
-    contentDiv.innerHTML = '<div class="ai-loading">Gemini 3.0 Flash Preview... 🧠</div>';
-    
+    const contentDiv = document.getElementById('ai-summary-content'); contentDiv.innerHTML = '<div class="ai-loading">Gemini 3.0 Flash Preview... 🧠</div>';
     const prompt = `Analizza: "${text}"\n1. Riassunto.\n2. Insight.\n3. Consiglio. Markdown.`;
-
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
+        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error?.message || "Err");
-        
-        if(data.candidates && data.candidates[0].content && data.candidates[0].content.parts){
-            contentDiv.innerHTML = marked.parse(data.candidates[0].content.parts[0].text);
-        } else {
-            throw new Error("Risposta vuota");
-        }
+        contentDiv.innerHTML = marked.parse(data.candidates[0].content.parts[0].text);
     } catch (error) { contentDiv.innerHTML = `Err: ${error.message}`; }
 };
 
-// --- TAGS ---
-const tagRules = {
-    'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici', 'relazione'],
-    'Salute': ['cibo', 'dieta', 'fumo', 'allenamento', 'sonno', 'salute'],
-    'Lavoro': ['progetto', 'app', 'business', 'soldi', 'produttività'],
-    'Mindset': ['gratitudine', 'ansia', 'felice', 'triste', 'paura']
-};
-function detectTagsInContent(text) {
-    const lower = text.toLowerCase(); const found = new Set();
-    for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) found.add(tag); }
-    return Array.from(found);
-}
-window.openTagExplorer = () => {
-    document.getElementById('tag-modal').classList.add('open');
-    const cloud = document.getElementById('tag-cloud'); cloud.innerHTML = '';
-    Object.keys(tagRules).forEach(tag => {
-        const btn = document.createElement('span'); btn.className = 'tag-chip'; btn.innerText = tag; btn.onclick = () => searchByTag(tag); cloud.appendChild(btn);
-    });
-};
-async function searchByTag(tagName) {
-    const resultsDiv = document.getElementById('tag-results'); resultsDiv.innerHTML = "Cerco...";
-    const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
-    const querySnapshot = await getDocs(q); resultsDiv.innerHTML = '';
-    if (querySnapshot.empty) { resultsDiv.innerHTML = "Nessun risultato."; return; }
-    querySnapshot.forEach((doc) => {
-        const div = document.createElement('div'); div.className = 'result-row';
-        div.innerHTML = `<span>🗓️ ${doc.id}</span> <span>${doc.data().stats?.words || 0} parole</span>`;
-        div.onclick = () => { document.getElementById('tag-modal').classList.remove('open'); document.getElementById('date-picker').value = doc.id; changeDate(doc.id); };
-        resultsDiv.appendChild(div);
-    });
-}
-
-// --- UTILITIES & LEGACY ---
+// UTILS & LEGACY (Tag, WalkTalk, Charts)
+const tagRules = { 'Relazioni': ['simona', 'nala', 'mamma', 'papà', 'amici'], 'Salute': ['cibo', 'dieta', 'allenamento', 'sonno'], 'Lavoro': ['progetto', 'app', 'business', 'soldi'], 'Mindset': ['gratitudine', 'ansia', 'felice', 'triste'] };
+function detectTagsInContent(text) { const lower = text.toLowerCase(); const found = new Set(); for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) found.add(tag); } return Array.from(found); }
+window.openTagExplorer = () => { document.getElementById('tag-modal').classList.add('open'); const c = document.getElementById('tag-cloud'); c.innerHTML = ''; Object.keys(tagRules).forEach(tag => { const b = document.createElement('span'); b.className = 'tag-chip'; b.innerText = tag; b.onclick = () => searchByTag(tag); c.appendChild(b); }); };
+async function searchByTag(tag) { const r = document.getElementById('tag-results'); r.innerHTML = "Cerco..."; const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tag)); const s = await getDocs(q); r.innerHTML = ''; if (s.empty) { r.innerHTML = "Nessun risultato."; return; } s.forEach((doc) => { const d = document.createElement('div'); d.className = 'result-row'; d.innerHTML = `<span>🗓️ ${doc.id}</span> <span>${doc.data().stats?.words || 0} parole</span>`; d.onclick = () => { document.getElementById('tag-modal').classList.remove('open'); document.getElementById('date-picker').value = doc.id; changeDate(doc.id); }; r.appendChild(d); }); }
 window.handleKeyUp = (e) => { if (e.key === 'Enter') processLastBlock(); };
-function processLastBlock() { 
-     const selection = window.getSelection(); if (!selection.rangeCount) return; 
-     let block = selection.getRangeAt(0).startContainer; 
-     while (block && block.id !== 'editor' && block.tagName !== 'DIV' && block.tagName !== 'P') { block = block.parentNode; } 
-     if (block && block.previousElementSibling) { 
-         const prevBlock = block.previousElementSibling; 
-         if (!prevBlock.querySelector('.auto-tag') && prevBlock.innerText.trim().length > 10) { 
-             const tag = analyzeTextForTag(prevBlock.innerText); 
-             if (tag) { 
-                 const tagSpan = document.createElement('span'); tagSpan.className = 'auto-tag'; tagSpan.innerText = tag; tagSpan.contentEditable = "false"; 
-                 prevBlock.prepend(tagSpan); saveData(); 
-            } 
-        } 
-    }
-}
+function processLastBlock() { const s = window.getSelection(); if (!s.rangeCount) return; let b = s.getRangeAt(0).startContainer; while (b && b.id !== 'editor' && b.tagName !== 'DIV' && b.tagName !== 'P') { b = b.parentNode; } if (b && b.previousElementSibling) { const p = b.previousElementSibling; if (!p.querySelector('.auto-tag') && p.innerText.trim().length > 10) { const tag = analyzeTextForTag(p.innerText); if (tag) { const ts = document.createElement('span'); ts.className = 'auto-tag'; ts.innerText = tag; ts.contentEditable = "false"; p.prepend(ts); saveData(); } } } }
 function analyzeTextForTag(text) { const lower = text.toLowerCase(); for (const [tag, keywords] of Object.entries(tagRules)) { if (keywords.some(k => lower.includes(k))) return tag; } return null; }
-
-// WALK & TALK
 let walkRecognition = null; let isWalkSessionActive = false;
 window.openWalkTalk = () => document.getElementById('walk-talk-modal').classList.add('open');
 window.closeWalkTalk = () => { stopWalkSession(); document.getElementById('walk-talk-modal').classList.remove('open'); };
 window.toggleWalkSession = () => { if(isWalkSessionActive) stopWalkSession(); else startWalkSession(); };
-function startWalkSession() {
-    if (!('webkitSpeechRecognition' in window)) { alert("No speech support"); return; }
-    isWalkSessionActive = true; document.getElementById('walk-mic-btn').classList.add('active'); document.getElementById('walk-status').innerText = "Ascolto...";
-    walkRecognition = new webkitSpeechRecognition(); walkRecognition.continuous = false; walkRecognition.lang = 'it-IT';
-    walkRecognition.onresult = (e) => {
-        const t = e.results[0][0].transcript; document.getElementById('walk-transcript').innerText = t;
-        const time = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-        document.getElementById('editor').innerHTML += `<div style="margin-top:10px;"><b>🗣️ Walk (${time}):</b> ${t}</div>`;
-        saveData(); setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 1500);
-    };
-    walkRecognition.start();
-}
+function startWalkSession() { if (!('webkitSpeechRecognition' in window)) { alert("No speech support"); return; } isWalkSessionActive = true; document.getElementById('walk-mic-btn').classList.add('active'); document.getElementById('walk-status').innerText = "Ascolto..."; walkRecognition = new webkitSpeechRecognition(); walkRecognition.continuous = false; walkRecognition.lang = 'it-IT'; walkRecognition.onresult = (e) => { const t = e.results[0][0].transcript; document.getElementById('walk-transcript').innerText = t; const time = new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}); document.getElementById('editor').innerHTML += `<div style="margin-top:10px;"><b>🗣️ Walk (${time}):</b> ${t}</div>`; saveData(); setTimeout(() => { if(isWalkSessionActive) walkRecognition.start(); }, 1500); }; walkRecognition.start(); }
 function stopWalkSession() { isWalkSessionActive = false; document.getElementById('walk-mic-btn').classList.remove('active'); document.getElementById('walk-status').innerText = "Stop"; if(walkRecognition) walkRecognition.stop(); }
-
-// SIMPLE DICTATION
 let timeout;
-let recognition = null; if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => document.getElementById('mic-btn').classList.add('recording'); recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording'); recognition.onresult = (e) => { let final = ''; for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) final += e.results[i][0].transcript; } if (final) { document.execCommand('insertText', false, final + " "); saveData(); } }; }
-window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("No support"); };
-
-// STATS & CHARTS
-window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); renderChart(); };
-function renderChart() { 
-    const ctx = document.getElementById('chartCanvas').getContext('2d'); 
-    if(window.myChart) window.myChart.destroy(); 
-    window.myChart = new Chart(ctx, { 
-        type:'bar', 
-        data:{
-            labels:['Mese Corrente'], 
-            datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]
-        }, 
-        options:{
-            plugins:{legend:{display:false}}, 
-            scales:{x:{display:false}, y:{grid:{color:'#333'}}}
-        } 
-    }); 
-}
-
-// FORMATTING & MEDIA
-window.document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
-window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
+let recognition = null; if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => {}; recognition.onend = () => {}; recognition.onresult = (e) => { let f = ''; for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) f += e.results[i][0].transcript; } if (f) { document.execCommand('insertText', false, f + " "); saveData(); } }; }
+window.document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const t = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, t); });
+window.format = (c) => { document.execCommand(c, false, null); document.getElementById('editor').focus(); };
 window.triggerImageUpload = () => document.getElementById('img-input').click();
-window.handleImageUpload = (input) => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const scale = 600 / img.width; c.width = 600; c.height = img.height * scale; ctx.drawImage(img, 0, 0, c.width, c.height); document.execCommand('insertHTML', false, `<img src="${c.toDataURL('image/jpeg', 0.7)}"><br>`); saveData(); }; }; reader.readAsDataURL(file); };
+window.handleImageUpload = (i) => { const f = i.files[0]; if (!f) return; const r = new FileReader(); r.onload = (e) => { const im = new Image(); im.src = e.target.result; im.onload = () => { const c = document.createElement('canvas'); const x = c.getContext('2d'); const s = 600 / im.width; c.width = 600; c.height = im.height * s; x.drawImage(im, 0, 0, c.width, c.height); document.execCommand('insertHTML', false, `<img src="${c.toDataURL('image/jpeg', 0.7)}"><br>`); saveData(); }; }; r.readAsDataURL(f); };
+window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); renderChart(); };
+window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
 window.toggleTheme = () => { document.body.classList.toggle('light-mode'); localStorage.setItem('theme', document.body.classList.contains('light-mode')?'light':'dark'); };
 window.exportData = () => { const b = new Blob([document.getElementById('editor').innerHTML],{type:'text/html'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`backup_${currentDateString}.html`; a.click(); };
-window.openSettings = () => document.getElementById('settings-modal').classList.add('open');
+function renderChart() { const x = document.getElementById('chartCanvas').getContext('2d'); if(window.myChart) window.myChart.destroy(); window.myChart = new Chart(x, { type:'bar', data:{labels:['Mese Corrente'], datasets:[{label:'Parole', data:[currentDayStats.words || 0], backgroundColor:'#7c4dff'}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#333'}}}} }); }

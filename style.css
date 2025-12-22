@@ -1,6 +1,6 @@
 :root { 
     --bg: #1e1e1e; --text: #e0e0e0; --accent: #7c4dff; --panel: #252526; --border: #333; --modal-bg: #2d2d2d; --tag-bg: #333; --metric-bg: #2d2d2d; 
-    /* Variabili Editor Personalizzabili */
+    /* Variabili Editor */
     --editor-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --editor-size: 1.1rem;
 }
@@ -20,7 +20,7 @@ header { padding: 10px 15px; border-bottom: 1px solid var(--border); background:
 input[type="month"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 5px 10px; border-radius: 8px; font-family: inherit; }
 .db-status { font-size: 0.75rem; color: #aaa; transition: color 0.3s; }
 
-/* AI COACH AREA */
+/* AI COACH AREA (Risposte arancioni in alto) */
 #ai-coach-area { display: none; background: rgba(124, 77, 255, 0.1); border-left: 3px solid var(--accent); padding: 10px; margin-top: 10px; border-radius: 4px; animation: slideDown 0.3s ease; }
 .ai-title { font-size: 0.8rem; font-weight: bold; color: var(--accent); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
 #ai-message { font-size: 0.95rem; line-height: 1.4; margin-bottom: 10px; font-style: italic; }
@@ -42,8 +42,7 @@ input[type="month"] { background: var(--bg); color: var(--text); border: 1px sol
 .metric-item { display: flex; align-items: center; gap: 4px; }
 .metric-val { color: var(--text); font-weight: bold; }
 .metric-danger { color: #ff5252; font-weight: bold; }
-
-/* TRIP CONTROLS */
+/* Stili specifici Trip Panel */
 .trip-btn { background: var(--panel); border: 1px solid var(--border); color: var(--text); width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 10px; }
 .trip-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
 
@@ -58,34 +57,39 @@ main { flex-grow: 1; overflow-y: auto; position: relative; display: flex; flex-d
     margin: 0 auto; 
     width: 100%; 
     box-sizing: border-box; 
-    /* USIAMO LE VARIABILI */
+    /* Variabili CSS applicate */
     font-family: var(--editor-font);
     font-size: var(--editor-size);
 }
 #editor img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 #img-input { display: none; }
 
-/* TAGS & TASKS */
+/* TAGS & TASKS IN EDITOR */
 .auto-tag { background: rgba(124, 77, 255, 0.2); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; margin-right: 5px; cursor: default; user-select: none; }
+input.smart-task { accent-color: var(--accent); cursor: pointer; transform: scale(1.2); margin-right: 5px; }
 
 /* MODALS */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(2px); }
 .modal.open { display: flex; }
 .modal-content { background: var(--modal-bg); width: 90%; max-width: 500px; max-height: 80vh; border-radius: 12px; padding: 20px; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); position: relative; color: var(--text); }
 
-/* Tag Explorer Styles */
+/* CHAT STYLES (Nuovo) */
+.chat-message { max-width: 80%; padding: 10px 15px; border-radius: 15px; margin-bottom: 10px; font-size: 0.95rem; line-height: 1.4; }
+.chat-ai { align-self: flex-start; background: rgba(124, 77, 255, 0.1); border: 1px solid var(--accent); border-top-left-radius: 2px; color: var(--text); }
+.chat-user { align-self: flex-end; background: var(--panel); border: 1px solid var(--border); border-bottom-right-radius: 2px; color: var(--text); }
+
+/* Tag Explorer */
 #tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-chip { background: var(--tag-bg); padding: 6px 12px; border: 1px solid var(--border); border-radius: 15px; margin: 3px; cursor: pointer; font-size: 0.85rem; }
 .tag-chip:hover { background: var(--accent); color: white; border-color: var(--accent); }
 .result-row { padding: 10px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; }
 .result-row:hover { background: rgba(255,255,255,0.05); }
 
-/* COACH MANAGER STYLES */
+/* COACH LIST */
 .coach-input-area { display: flex; gap: 10px; margin-bottom: 20px; }
 #new-prompt-input { flex-grow: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 #coach-list-container { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
 .coach-item { padding: 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.coach-item:last-child { border-bottom: none; }
 .coach-text { font-size: 0.9rem; flex-grow: 1; }
 .coach-meta { font-size: 0.75rem; color: #aaa; margin-right: 10px; white-space: nowrap; }
 .coach-btn-group { display: flex; gap: 5px; }

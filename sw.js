@@ -1,9 +1,9 @@
-const CACHE_NAME = 'diario-cache-v14-8'; // Aggiornato V14.8
+const CACHE_NAME = 'diario-cache-v15-0';
 const assetsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js?v=14.8',
+  './app.js?v=15.0',
   './manifest.json'
 ];
 
@@ -21,6 +21,7 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cache => {
           if (cache !== CACHE_NAME) {
+            console.log('Pulizia vecchia cache:', cache);
             return caches.delete(cache);
           }
         })
