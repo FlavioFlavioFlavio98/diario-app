@@ -1,22 +1,20 @@
-const CACHE_NAME = 'diario-cache-v14-1'; // Versione aggiornata
+const CACHE_NAME = 'diario-cache-v14-2'; // VERSIONE AGGIORNATA
 const assetsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js?v=14.1', // Cacheiamo la versione specifica
+  './app.js?v=14.2',
   './manifest.json'
 ];
 
-// Installazione
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Forza attivazione
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(assetsToCache))
   );
 });
 
-// Attivazione e Pulizia Vecchie Cache
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -32,7 +30,6 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)

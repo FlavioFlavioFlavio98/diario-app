@@ -4,9 +4,7 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from
 import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@1.33.0/dist/web/index.mjs";
 
 // --- VERSIONE APP ---
-const APP_VERSION = "V14.1";
-
-// Inietta la versione nel DOM
+const APP_VERSION = "V14.2";
 const verEl = document.getElementById('app-version-display');
 if(verEl) verEl.innerText = APP_VERSION;
 const loginVerEl = document.getElementById('login-version');
@@ -70,11 +68,14 @@ function createPromptObj(text) {
 let currentUser = null;
 let currentDateString = new Date().toISOString().slice(0, 7); // MESE YYYY-MM
 let currentDayStats = {};
-let questionHistory = {}; 
 let currentTags = [];
 let globalWordCount = 0; 
-let sessionStartTime = Date.now();
 let currentPrompts = [];
+
+// TIMER VARIABLES
+let timerInterval = null;
+let timerSeconds = 0;
+let isTimerRunning = false;
 
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
@@ -97,36 +98,80 @@ onAuthStateChanged(auth, async (user) => {
         loadGlobalStats(); 
         await loadDiaryForDate(currentDateString);
         loadCoachPrompts();
-        startSessionTimer();
+        
+        // Avvia il timer automaticamente al login
+        timerPlay();
     }
 });
 
-// --- NUOVA LOGICA: @now trigger ---
+// --- NUOVA LOGICA: @now trigger (Robust detection) ---
 document.getElementById('editor').addEventListener('input', (e) => {
-    const editor = document.getElementById('editor');
-    // Controlliamo il testo puro per trovare @now
-    // Attenzione: innerText potrebbe contenere newline
-    if (editor.innerText.endsWith('@now')) {
-        // Rimuoviamo @now usando execCommand delete per non rompere la history
-        // Siccome @now sono 4 caratteri, eseguiamo delete 4 volte
-        for(let i=0; i<4; i++) {
-            document.execCommand('delete', false, null);
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+        const node = sel.anchorNode;
+        // Controlliamo solo se siamo dentro un nodo di testo
+        if (node.nodeType === 3) {
+            const text = node.textContent;
+            // Prendiamo il testo FINO alla posizione del cursore
+            const caretPos = sel.anchorOffset;
+            const textBeforeCaret = text.substring(0, caretPos);
+            
+            if (textBeforeCaret.endsWith('@now')) {
+                // Abbiamo trovato il trigger!
+                
+                // 1. Selezioniamo il testo "@now"
+                const range = document.createRange();
+                range.setStart(node, caretPos - 4);
+                range.setEnd(node, caretPos);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                
+                // 2. Prepariamo la data
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('it-IT');
+                const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
+                const htmlToInsert = `<span style="color: #ff5252; font-weight: bold;">📅 ${dateStr} - ${timeStr}</span>&nbsp;`;
+                
+                // 3. Sovrascriviamo la selezione con l'HTML
+                document.execCommand('insertHTML', false, htmlToInsert);
+            }
         }
-        
-        // Generiamo il timestamp
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('it-IT');
-        const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
-        const htmlToInsert = `<span style="color: #ff5252; font-weight: bold;">📅 ${dateStr} - ${timeStr}</span>&nbsp;`;
-        
-        document.execCommand('insertHTML', false, htmlToInsert);
     }
     
-    // Logica salvataggio automatico esistente
+    // Auto-save logic
     updateCounts(); 
     clearTimeout(timeout); 
     timeout = setTimeout(saveData, 1500);
 });
+
+// --- TIMER LOGIC (Accumulatore) ---
+window.timerPlay = () => {
+    if (isTimerRunning) return;
+    isTimerRunning = true;
+    timerInterval = setInterval(() => {
+        timerSeconds++;
+        updateTimerDisplay();
+    }, 1000);
+};
+
+window.timerPause = () => {
+    isTimerRunning = false;
+    clearInterval(timerInterval);
+};
+
+window.timerStop = () => {
+    isTimerRunning = false;
+    clearInterval(timerInterval);
+    timerSeconds = 0;
+    updateTimerDisplay();
+};
+
+function updateTimerDisplay() {
+    const m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+    const s = (timerSeconds % 60).toString().padStart(2, '0');
+    document.getElementById('session-timer').innerText = `${m}:${s}`;
+}
+
 
 // --- COACH MANAGER LOGIC ---
 async function loadCoachPrompts() {
@@ -222,7 +267,24 @@ window.triggerBrainstorm = () => {
     document.getElementById('ai-coach-area').style.display = 'block';
 };
 
-// --- FIX INSERIMENTO: FORZA APPEND IN FONDO ---
+// --- NUOVA FUNZIONE: SCROLL TO BOTTOM ---
+window.scrollToBottom = () => {
+    const editor = document.getElementById('editor');
+    editor.focus();
+    
+    // 1. Sposta il cursore alla fine
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false); // va alla fine
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    
+    // 2. Forza lo scroll
+    editor.scrollTop = editor.scrollHeight;
+};
+
+// --- INSERIMENTO DOMANDA (Arancione + Scroll) ---
 window.insertPrompt = (promptId) => {
     const pIndex = currentPrompts.findIndex(p => p.id == promptId);
     let textToInsert = "Domanda...";
@@ -232,24 +294,20 @@ window.insertPrompt = (promptId) => {
         savePromptsToDb();
     }
 
-    const editor = document.getElementById('editor');
-    editor.focus();
+    // Usiamo la funzione di scroll per preparare il terreno (focus + fine)
+    window.scrollToBottom();
 
-    // SPOSTA CURSORE ALLA FINE
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    range.collapse(false); // false = fine
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-
-    const html = `<br><p style="color: #ff5252; font-weight: bold; margin-bottom: 5px;">Domanda: ${textToInsert}</p><p>Risposta: </p>`;
+    // Inseriamo in arancione (#ff9100)
+    const html = `<br><p style="color: #ff9100; font-weight: bold; margin-bottom: 5px;">Domanda: ${textToInsert}</p><p>Risposta: </p>`;
     document.execCommand('insertHTML', false, html);
     
     document.getElementById('ai-coach-area').style.display = 'none';
     
-    // Auto scroll per vedere cosa abbiamo inserito
-    setTimeout(() => { editor.scrollTop = editor.scrollHeight; }, 100);
+    // Scrolla ancora per sicurezza dopo l'inserimento
+    setTimeout(() => { 
+        const editor = document.getElementById('editor');
+        editor.scrollTop = editor.scrollHeight; 
+    }, 100);
     saveData();
 };
 
@@ -272,11 +330,8 @@ async function loadDiaryForDate(dateStr) {
                 document.getElementById('editor').innerHTML = data.htmlContent || ""; 
             }
             
-            // --- FIX SCROLL AUTOMATICO ALL'APERTURA ---
-            const editor = document.getElementById('editor');
-            setTimeout(() => {
-                editor.scrollTop = editor.scrollHeight;
-            }, 100);
+            // Scroll automatico all'apertura
+            setTimeout(window.scrollToBottom, 200);
 
             currentDayStats = data.stats || {};
             currentTags = data.tags || [];
@@ -332,16 +387,6 @@ async function saveData() {
         statusLabel.innerText = "ERROR";
         statusLabel.style.color = "red";
     }
-}
-
-function startSessionTimer() {
-    sessionStartTime = Date.now();
-    setInterval(() => {
-        const diff = Math.floor((Date.now() - sessionStartTime) / 1000);
-        const m = Math.floor(diff / 60).toString().padStart(2, '0');
-        const s = (diff % 60).toString().padStart(2, '0');
-        document.getElementById('session-timer').innerText = `${m}:${s}`;
-    }, 1000);
 }
 
 function loadGlobalStats() {

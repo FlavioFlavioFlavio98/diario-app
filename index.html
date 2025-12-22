@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V14.1</title>
+    <title>Diario V14.2</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -54,6 +54,10 @@
             
             <div class="separator"></div>
             
+            <button class="tool-btn" onclick="scrollToBottom()" title="Vai alla fine"><span class="material-icons-round">arrow_downward</span></button>
+            
+            <div class="separator"></div>
+
             <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
             <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
             <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
@@ -69,14 +73,20 @@
         </div>
         
         <div id="metrics-bar">
-            <div class="metric-item" title="Tempo sessione attuale">
-                <span>⏱️</span> <span id="session-timer" class="metric-val">00:00</span>
+            <div class="metric-item" style="min-width: 140px;">
+                <div class="timer-controls">
+                    <button class="timer-btn" onclick="timerPlay()">▶</button>
+                    <button class="timer-btn" onclick="timerPause()">II</button>
+                    <button class="timer-btn" onclick="timerStop()">■</button>
+                </div>
+                <span id="session-timer" class="metric-val" style="margin-left:5px;">00:00</span>
             </div>
+
             <div class="metric-item" title="Parole scritte oggi">
-                <span>📝 Sessione:</span> <span id="count-today" class="metric-val">0</span>
+                <span>📝 Sess:</span> <span id="count-today" class="metric-val">0</span>
             </div>
             <div class="metric-item" title="Parole totali nel diario">
-                <span>📚 Totale:</span> <span id="count-global" class="metric-val">Loading...</span>
+                <span>📚 Tot:</span> <span id="count-global" class="metric-val">Loading...</span>
             </div>
             <div class="metric-item" title="Peso del file attuale (max 1000KB)">
                 <span>💾</span> <span id="file-weight" class="metric-val">0 KB</span>
@@ -123,6 +133,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js?v=14.1"></script>
+    <script type="module" src="app.js?v=14.2"></script>
 </body>
 </html>
