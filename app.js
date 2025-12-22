@@ -3,6 +3,15 @@ import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, o
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@1.33.0/dist/web/index.mjs";
 
+// --- VERSIONE APP ---
+const APP_VERSION = "V14.1";
+
+// Inietta la versione nel DOM
+const verEl = document.getElementById('app-version-display');
+if(verEl) verEl.innerText = APP_VERSION;
+const loginVerEl = document.getElementById('login-version');
+if(loginVerEl) loginVerEl.innerText = APP_VERSION;
+
 let aiInstance = null;
 
 const firebaseConfig = {
@@ -19,7 +28,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// DEFAULT PROMPTS (Ora come oggetti con ID univoco e contatore)
+// DEFAULT PROMPTS
 const defaultPromptsText = [
     "Qual è stata la cosa migliore che ti è successa oggi?",
     "Scrivi 3 cose, anche piccole, per cui sei grato in questo momento.",
@@ -53,23 +62,19 @@ const defaultPromptsText = [
     "Scrivi un messaggio di incoraggiamento per il te stesso di domani mattina."
 ];
 
-// Funzione helper per creare oggetti prompt
 function createPromptObj(text) {
     return { id: Date.now() + Math.random(), text: text, usage: 0 };
 }
 
 // VARIABILI GLOBALI
 let currentUser = null;
-// MODIFICA CRITICA: Uso formato MESE (YYYY-MM) invece di Giorno
-let currentDateString = new Date().toISOString().slice(0, 7); 
+let currentDateString = new Date().toISOString().slice(0, 7); // MESE YYYY-MM
 let currentDayStats = {};
 let questionHistory = {}; 
 let currentTags = [];
 let globalWordCount = 0; 
 let sessionStartTime = Date.now();
 let currentPrompts = [];
-// Flag per evitare timestamp duplicati durante la sessione
-let isSessionInitialized = false; 
 
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
@@ -91,14 +96,39 @@ onAuthStateChanged(auth, async (user) => {
 
         loadGlobalStats(); 
         await loadDiaryForDate(currentDateString);
-        
-        // Carica le domande del Coach
         loadCoachPrompts();
+        startSessionTimer();
     }
 });
 
-// --- COACH MANAGER LOGIC ---
+// --- NUOVA LOGICA: @now trigger ---
+document.getElementById('editor').addEventListener('input', (e) => {
+    const editor = document.getElementById('editor');
+    // Controlliamo il testo puro per trovare @now
+    // Attenzione: innerText potrebbe contenere newline
+    if (editor.innerText.endsWith('@now')) {
+        // Rimuoviamo @now usando execCommand delete per non rompere la history
+        // Siccome @now sono 4 caratteri, eseguiamo delete 4 volte
+        for(let i=0; i<4; i++) {
+            document.execCommand('delete', false, null);
+        }
+        
+        // Generiamo il timestamp
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('it-IT');
+        const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
+        const htmlToInsert = `<span style="color: #ff5252; font-weight: bold;">📅 ${dateStr} - ${timeStr}</span>&nbsp;`;
+        
+        document.execCommand('insertHTML', false, htmlToInsert);
+    }
+    
+    // Logica salvataggio automatico esistente
+    updateCounts(); 
+    clearTimeout(timeout); 
+    timeout = setTimeout(saveData, 1500);
+});
 
+// --- COACH MANAGER LOGIC ---
 async function loadCoachPrompts() {
     if (!currentUser) return;
     try {
@@ -107,21 +137,17 @@ async function loadCoachPrompts() {
         
         if (snap.exists() && snap.data().prompts && snap.data().prompts.length > 0) {
             let loaded = snap.data().prompts;
-            // MIGRAZIONE DATI: Se sono stringhe vecchie, convertile in oggetti
             if (typeof loaded[0] === 'string') {
                 currentPrompts = loaded.map(txt => createPromptObj(txt));
-                savePromptsToDb(); // Salva subito la conversione
+                savePromptsToDb();
             } else {
                 currentPrompts = loaded;
             }
         } else {
-            // Default iniziali
             currentPrompts = defaultPromptsText.map(txt => createPromptObj(txt));
             await setDoc(docRef, { prompts: currentPrompts }, { merge: true });
         }
     } catch (e) {
-        console.error("Errore caricamento prompts:", e);
-        // Fallback sicuro
         currentPrompts = defaultPromptsText.map(txt => createPromptObj(txt));
     }
 }
@@ -133,9 +159,7 @@ async function savePromptsToDb() {
             prompts: currentPrompts 
         }, { merge: true });
         renderCoachList(); 
-    } catch (e) {
-        alert("Errore salvataggio modifiche Coach: " + e.message);
-    }
+    } catch (e) { console.error(e); }
 }
 
 window.openCoachManager = () => {
@@ -146,14 +170,10 @@ window.openCoachManager = () => {
 function renderCoachList() {
     const listContainer = document.getElementById('coach-list-container');
     listContainer.innerHTML = '';
-    
-    // ORDINAMENTO: Decrescente per utilizzo (usage)
     const sortedPrompts = [...currentPrompts].sort((a, b) => (b.usage || 0) - (a.usage || 0));
     
     sortedPrompts.forEach((promptObj) => {
-        // Troviamo l'indice originale per edit/delete
         const realIndex = currentPrompts.findIndex(p => p.id === promptObj.id);
-        
         const div = document.createElement('div');
         div.className = 'coach-item';
         div.innerHTML = `
@@ -172,7 +192,6 @@ window.addCoachPrompt = () => {
     const input = document.getElementById('new-prompt-input');
     const text = input.value.trim();
     if (!text) return;
-    
     currentPrompts.unshift(createPromptObj(text)); 
     input.value = '';
     savePromptsToDb();
@@ -193,126 +212,83 @@ window.editCoachPrompt = (index) => {
     }
 };
 
-// --- BRAINSTORMING & INSERIMENTO DOMANDE ---
-
 window.triggerBrainstorm = () => { 
-    if (currentPrompts.length === 0) {
-        alert("Nessuna domanda disponibile. Aggiungine una!");
-        return;
-    }
-    // Pesca casualmente, ma potremmo anche pescare tra le meno usate se volessimo variare
+    if (currentPrompts.length === 0) { alert("Nessuna domanda disponibile."); return; }
     const randIndex = Math.floor(Math.random() * currentPrompts.length);
     const pObj = currentPrompts[randIndex];
-    
     document.getElementById('ai-title').innerText = "Coach";
     document.getElementById('ai-message').innerText = pObj.text;
-    
-    // Passiamo l'ID del prompt per incrementare il contatore
     document.getElementById('ai-actions').innerHTML = `<button class="ai-btn-small" onclick="insertPrompt('${pObj.id}')">Inserisci</button>`;
     document.getElementById('ai-coach-area').style.display = 'block';
 };
 
+// --- FIX INSERIMENTO: FORZA APPEND IN FONDO ---
 window.insertPrompt = (promptId) => {
-    // 1. Trova domanda e incrementa contatore
-    // promptId viene passato come stringa, convertiamo se necessario, ma gli ID creati con Date.now() sono numeri
-    // Se passato via HTML attribute, è stringa.
     const pIndex = currentPrompts.findIndex(p => p.id == promptId);
-    
     let textToInsert = "Domanda...";
     if (pIndex > -1) {
         currentPrompts[pIndex].usage = (currentPrompts[pIndex].usage || 0) + 1;
         textToInsert = currentPrompts[pIndex].text;
-        savePromptsToDb(); // Salva incremento
+        savePromptsToDb();
     }
 
-    document.getElementById('editor').focus();
-    
-    // 2. Inserimento HTML Stilizzato (Rosso)
+    const editor = document.getElementById('editor');
+    editor.focus();
+
+    // SPOSTA CURSORE ALLA FINE
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false); // false = fine
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
     const html = `<br><p style="color: #ff5252; font-weight: bold; margin-bottom: 5px;">Domanda: ${textToInsert}</p><p>Risposta: </p>`;
     document.execCommand('insertHTML', false, html);
     
     document.getElementById('ai-coach-area').style.display = 'none';
+    
+    // Auto scroll per vedere cosa abbiamo inserito
+    setTimeout(() => { editor.scrollTop = editor.scrollHeight; }, 100);
     saveData();
 };
-
-// --- LOGICA SESSIONE & TIMESTAMP ---
-
-// Funzione per inserire il Timestamp all'avvio
-function appendSessionTimestamp() {
-    if (isSessionInitialized) return; // Fallo solo una volta per sessione/caricamento
-    
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('it-IT');
-    const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
-    
-    const timestampHtml = `<br><div class="session-timestamp">📅 ${dateStr} - ${timeStr}</div><br>`;
-    
-    const editor = document.getElementById('editor');
-    
-    // Controllo per non aggiungerlo se il file è vuoto (opzionale, ma meglio metterlo)
-    // O se l'ultima cosa scritta è già un timestamp (per evitare refresh multipli)
-    if (!editor.innerHTML.includes(timestampHtml.trim())) {
-         // Usiamo una selezione range per appendere alla fine in modo sicuro o innerHTML
-         editor.innerHTML += timestampHtml;
-         // Salviamo subito per persistere il timestamp
-         saveData();
-    }
-    
-    isSessionInitialized = true;
-}
 
 // --- CORE FUNCTIONS ---
 
 window.changeDate = (newDate) => { 
-    // newDate sarà YYYY-MM
     currentDateString = newDate; 
-    isSessionInitialized = false; // Reset flag cambio data
     loadDiaryForDate(newDate); 
 };
 
 async function loadDiaryForDate(dateStr) {
     document.getElementById('db-status').innerText = "Loading...";
     document.getElementById('editor').innerHTML = ""; 
-    
-    // NOTA: dateStr ora è YYYY-MM
     const docRef = doc(db, "diario", currentUser.uid, "entries", dateStr);
     
-    // Usiamo onSnapshot per real-time updates
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
-            
-            // Aggiorniamo l'editor solo se non stiamo scrivendo attivamente per evitare conflitti cursore
-            // Ma al primo caricamento dobbiamo farlo.
             if (document.activeElement.id !== 'editor') { 
                 document.getElementById('editor').innerHTML = data.htmlContent || ""; 
             }
             
-            // Qui proviamo ad appendere il timestamp SE è il caricamento iniziale
-            if (!isSessionInitialized) {
-                // Piccolo timeout per assicurarsi che l'HTML sia renderizzato
-                setTimeout(() => appendSessionTimestamp(), 500);
-            }
+            // --- FIX SCROLL AUTOMATICO ALL'APERTURA ---
+            const editor = document.getElementById('editor');
+            setTimeout(() => {
+                editor.scrollTop = editor.scrollHeight;
+            }, 100);
 
             currentDayStats = data.stats || {};
             currentTags = data.tags || [];
-            
-            const words = updateCounts();
-            updateMetrics(data.htmlContent || "", words);
+            updateMetrics(data.htmlContent || "", updateCounts());
             
             document.getElementById('db-status').innerText = "Sync OK";
             document.getElementById('db-status').style.color = "#00e676";
         } else {
-            // Nuovo Mese
             document.getElementById('editor').innerHTML = ""; 
             updateMetrics("", 0);
-            document.getElementById('db-status').innerText = "New Month";
+            document.getElementById('db-status').innerText = "Nuovo Mese";
             document.getElementById('db-status').style.color = "#aaa";
-            
-            // Anche se è nuovo, mettiamo il timestamp
-            if (!isSessionInitialized) {
-                 setTimeout(() => appendSessionTimestamp(), 500);
-            }
         }
     });
 }
@@ -327,8 +303,6 @@ async function saveData() {
         const content = document.getElementById('editor').innerHTML;
         const wordsToday = updateCounts();
         const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
-
-        // Calcolo Delta per Statistiche Globali
         const wordsBefore = currentDayStats.words || 0;
         const deltaWords = wordsToday - wordsBefore;
 
@@ -344,7 +318,6 @@ async function saveData() {
         if (deltaWords !== 0 || globalWordCount === 0) { 
             let newGlobalCount = globalWordCount + deltaWords;
             if (newGlobalCount < 0) newGlobalCount = 0; 
-            
             await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), {
                 totalWords: newGlobalCount,
                 lastUpdate: new Date()
@@ -354,16 +327,12 @@ async function saveData() {
         statusLabel.innerText = "Saved";
         statusLabel.style.color = "#00e676";
         updateMetrics(content, wordsToday);
-
     } catch (error) {
         console.error(error);
         statusLabel.innerText = "ERROR";
         statusLabel.style.color = "red";
     }
 }
-
-// --- UTILS, STATS & OTHERS ---
-// Mantenute identiche, solo pulizia variabili non usate
 
 function startSessionTimer() {
     sessionStartTime = Date.now();
@@ -384,15 +353,20 @@ function loadGlobalStats() {
     });
 }
 
+function updateCounts() {
+    const text = document.getElementById('editor').innerText;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    updateMetrics(document.getElementById('editor').innerHTML, words);
+    return words;
+}
+
 function updateMetrics(content, wordsToday) {
     document.getElementById('count-today').innerText = wordsToday;
     document.getElementById('stat-count-today').innerText = wordsToday;
-
     const size = new Blob([content]).size;
     const kb = (size / 1024).toFixed(1);
     const weightEl = document.getElementById('file-weight');
     weightEl.innerText = `${kb} KB`;
-    
     if (size > 800000) { weightEl.classList.add('metric-danger'); weightEl.innerText += " ⚠️"; }
     else { weightEl.classList.remove('metric-danger'); }
 }
@@ -443,7 +417,6 @@ window.openTagExplorer = () => {
 async function searchByTag(tagName) {
     const resultsDiv = document.getElementById('tag-results');
     resultsDiv.innerHTML = "Cerco...";
-    // Nota: La ricerca per tag ora cercherà nei documenti MENSILI.
     const q = query(collection(db, "diario", currentUser.uid, "entries"), where("tags", "array-contains", tagName));
     const querySnapshot = await getDocs(q);
     resultsDiv.innerHTML = '';
@@ -483,23 +456,15 @@ function startWalkSession() {
 function stopWalkSession() { isWalkSessionActive = false; document.getElementById('walk-mic-btn').classList.remove('active'); document.getElementById('walk-status').innerText = "Stop"; if(walkRecognition) walkRecognition.stop(); }
 
 let timeout;
-document.getElementById('editor').addEventListener('input', () => { updateCounts(); clearTimeout(timeout); timeout = setTimeout(saveData, 1500); });
-document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
+let recognition = null; if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => document.getElementById('mic-btn').classList.add('recording'); recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording'); recognition.onresult = (e) => { let final = ''; for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) final += e.results[i][0].transcript; } if (final) { document.execCommand('insertText', false, final + " "); saveData(); } }; }
+window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("No support"); };
 
-function updateCounts() {
-    const text = document.getElementById('editor').innerText;
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    updateMetrics(document.getElementById('editor').innerHTML, words);
-    return words;
-}
+window.document.getElementById('editor').addEventListener('paste', (e) => { e.preventDefault(); const text = (e.originalEvent || e).clipboardData.getData('text/plain'); document.execCommand('insertText', false, text); });
 
 window.format = (cmd) => { document.execCommand(cmd, false, null); document.getElementById('editor').focus(); };
 window.insertMood = (e) => { document.execCommand('insertText', false, ` ${e} `); currentDayStats.mood = e; saveData(); };
 window.triggerImageUpload = () => document.getElementById('img-input').click();
 window.handleImageUpload = (input) => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const scale = 600 / img.width; c.width = 600; c.height = img.height * scale; ctx.drawImage(img, 0, 0, c.width, c.height); document.execCommand('insertHTML', false, `<img src="${c.toDataURL('image/jpeg', 0.7)}"><br>`); saveData(); }; }; reader.readAsDataURL(file); };
-
-let recognition = null; if ('webkitSpeechRecognition' in window) { recognition = new webkitSpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'it-IT'; recognition.onstart = () => document.getElementById('mic-btn').classList.add('recording'); recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording'); recognition.onresult = (e) => { let final = ''; for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) final += e.results[i][0].transcript; } if (final) { document.execCommand('insertText', false, final + " "); saveData(); } }; }
-window.toggleDictation = () => { if(recognition) { document.getElementById('mic-btn').classList.contains('recording') ? recognition.stop() : recognition.start(); } else alert("No support"); };
 
 window.openStats = () => { document.getElementById('stats-modal').classList.add('open'); renderChart(); };
 window.openSettings = () => document.getElementById('settings-modal').classList.add('open');

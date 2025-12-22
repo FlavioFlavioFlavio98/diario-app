@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V13.0 Modular</title>
+    <title>Diario V14.1</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -17,7 +17,7 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:var(--accent)">Diario V13.0</h1>
+        <h1 style="color:var(--accent)">Diario <span id="login-version" style="font-size: 0.5em; opacity: 0.7;"></span></h1>
         <button class="btn-primary" onclick="login()">Accedi con Google</button>
     </div>
 
@@ -29,6 +29,8 @@
                     <span id="db-status" class="db-status">Ready</span>
                 </div>
                 
+                <div id="app-version-display" style="font-size:0.7rem; color:#666; font-weight:bold; margin-right:auto; margin-left:10px;"></div>
+
                 <div style="display:flex; gap:5px; align-items:center;">
                     <button class="tool-btn" onclick="openTagExplorer()" title="Esplora Tag"><span class="material-icons-round">tag</span></button>
                     <button class="tool-btn" onclick="openCoachManager()" title="Gestisci Coach"><span class="material-icons-round">menu_book</span></button>
@@ -89,9 +91,7 @@
     </div>
 
     <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
-    
     <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
-    
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
     
     <div id="coach-manager-modal" class="modal">
@@ -100,16 +100,12 @@
                 <h2 style="margin:0;">Gestione Coach 🧠</h2>
                 <button onclick="document.getElementById('coach-manager-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
             </div>
-            
             <div class="coach-input-area">
                 <input type="text" id="new-prompt-input" placeholder="Scrivi una nuova domanda..." onkeyup="if(event.key==='Enter') addCoachPrompt()">
                 <button class="btn-primary" style="padding: 8px 15px; border-radius: 8px;" onclick="addCoachPrompt()">Aggiungi</button>
             </div>
-            
             <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Le domande sono ordinate per frequenza d'uso:</div>
-            
-            <div id="coach-list-container">
-                </div>
+            <div id="coach-list-container"></div>
         </div>
     </div>
 
@@ -127,7 +123,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
-<script type="module" src="app.js?v=14"></script>
+    <script type="module" src="app.js?v=14.1"></script>
 </body>
 </html>
