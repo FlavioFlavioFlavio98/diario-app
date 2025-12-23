@@ -24,6 +24,8 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 // --- VARIABILI GLOBALI DI STATO ---
+
+
 let currentUser = null;
 
 // Gestione Data: Usiamo un oggetto Date per facilitare la navigazione avanti/indietro
@@ -49,6 +51,8 @@ let tripSeconds = 0;
 let currentPrompts = [];
 let collectedTasks = [];
 let timeout; // Per il debounce del salvataggio
+// ... sotto le altre variabili globali ...
+let unsubscribeSnapshot = null; // Variabile per gestire la chiusura delle connessioni vecchie
 
 // --- PROMPTS DEFAULT ---
 const defaultPromptsText = [
@@ -162,17 +166,23 @@ window.jumpToDate = (val) => {
 };
 
 async function handleDateChange() {
-    isMonthlyView = false; // Torniamo sempre alla vista editor quando cambiamo data
+    isMonthlyView = false;
     updateDateDisplay();
     
+    // Calcoliamo il mese della nuova data selezionata
     const newMonthStr = getCurrentMonthString();
     
-    // Se il mese è cambiato rispetto ai dati che abbiamo in memoria, ricarichiamo dal DB
-    // loadMonthData gestisce internamente il listener onSnapshot
-    await loadMonthData(newMonthStr);
-    
-    // Aggiorna l'editor con il testo del nuovo giorno
-    renderEditorForDay(getCurrentDayString());
+    // IL FIX CRITICO:
+    // Se il mese della nuova data è DIVERSO da quello che abbiamo in memoria...
+    if (newMonthStr !== currentMonthString) {
+        // ...allora scarichiamo i nuovi dati dal database.
+        currentMonthString = newMonthStr; // Aggiorniamo la variabile globale
+        await loadMonthData(newMonthStr);
+    } else {
+        // ...ALTRIMENTI, se siamo nello stesso mese (es. dal 22 al 23),
+        // NON ricaricare dal DB. Usa i dati che hai già in memoria (che contengono le tue ultime modifiche).
+        renderEditorForDay(getCurrentDayString());
+    }
 }
 
 // --- CORE: CARICAMENTO DATI (FIX BUG SOVRASCRITTURA) ---
@@ -181,19 +191,23 @@ let currentSnapshotUnsubscribe = null; // Per pulire listener se necessario (opz
 async function loadMonthData(monthStr) {
     document.getElementById('db-status').innerText = "Loading...";
     
+    // PULIZIA: Se c'era un ascolto attivo sul mese precedente, staccalo.
+    // Questo evita conflitti se cambi mese velocemente.
+    if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+    }
+    
     const docRef = doc(db, "diario", currentUser.uid, "entries", monthStr);
     
-    onSnapshot(docRef, (snap) => {
-        // --- IL CUORE DEL FIX ---
-        // Se isLocalChange è true, significa che l'utente sta digitando.
-        // In questo caso, IGNORIAMO l'aggiornamento che arriva dal server per evitare che
-        // il testo salti o venga cancellato mentre si scrive.
+    // Salviamo la funzione di unsubscribe nella variabile globale
+    unsubscribeSnapshot = onSnapshot(docRef, (snap) => {
+        // Se l'utente sta scrivendo, ignoriamo gli aggiornamenti esterni per non disturbare
         const userIsTyping = isLocalChange || (document.activeElement && document.activeElement.id === 'editor');
         
         if (snap.exists()) {
             const data = snap.data();
-            
-            // Retrocompatibilità: se non c'è la mappa 'days', ma c'è 'htmlContent', migra al volo
+            // Gestione retrocompatibilità
             if (!data.days && data.htmlContent) {
                 currentMonthData = { days: { "01": data.htmlContent }, tasks: data.tasks || [] };
             } else {
@@ -204,7 +218,7 @@ async function loadMonthData(monthStr) {
             currentMonthData = { days: {}, tasks: [] };
         }
         
-        // Aggiorniamo l'HTML dell'editor SOLO se l'utente NON sta scrivendo e non siamo in vista mensile
+        // Aggiorna l'editor solo se necessario
         if (!userIsTyping && !isMonthlyView) {
             renderEditorForDay(getCurrentDayString());
         }
