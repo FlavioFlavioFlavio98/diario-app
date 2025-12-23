@@ -1,9 +1,9 @@
-const CACHE_NAME = 'diario-cache-v16-0';
+const CACHE_NAME = 'diario-cache-v17-0';
 const assetsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js?v=16.0',
+  './app.js?v=17.0',
   './manifest.json'
 ];
 
