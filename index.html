@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Diario V14.9</title>
+    <title>Diario V16.0</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965316.png">
@@ -22,10 +22,12 @@
     </div>
 
     <div id="app" style="display:none; flex-direction:column; height:100%;">
+        
         <header>
+            <button class="menu-toggle" onclick="toggleSidebar()"><span class="material-icons-round">menu</span></button>
             <div class="header-top">
                 <div class="date-navigator">
-                    <input type="month" id="date-picker" onchange="changeDate(this.value)">
+                    <input type="month" id="date-picker" onchange="changeMonth(this.value)">
                     <span id="db-status" class="db-status">Ready</span>
                 </div>
                 
@@ -39,59 +41,65 @@
                     <img id="user-pic" src="" style="width:28px; height:28px; border-radius:50%; border:2px solid var(--accent); margin-left:5px;">
                 </div>
             </div>
-            
-            <div id="ai-coach-area">
-                <div class="ai-title" id="ai-title">Coach</div>
-                <div id="ai-message"></div>
-                <div class="ai-actions" id="ai-actions"></div>
-            </div>
         </header>
 
-        <div class="toolbar">
-            <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
-            <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
+        <div class="app-container" id="app-container">
             
-            <button class="tool-btn" onclick="openAnalysisChat()" title="Analisi & Chat"><span class="material-icons-round" style="color:#ff9100;">forum</span></button>
-            
-            <button class="tool-btn" onclick="generateAiSummary()" title="Riassunto Statico"><span class="material-icons-round" style="color:#29b6f6;">auto_awesome</span></button>
-            
-            <div class="separator"></div>
-            <button class="tool-btn" onclick="scrollToBottom()" title="Vai alla fine"><span class="material-icons-round">arrow_downward</span></button>
-            <div class="separator"></div>
-            <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
-            <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
-            <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
-        </div>
-        
-        <div id="metrics-bar">
-            <div class="metric-item trip-panel" style="border: 1px solid var(--accent); padding: 2px 8px; border-radius: 6px;">
-                <span style="font-size:0.7rem; color:var(--accent); margin-right:5px;">TRIP</span>
-                <span id="trip-timer" class="metric-val">00:00</span>
-                <span style="margin:0 5px; opacity:0.5;">|</span>
-                <span id="trip-words" class="metric-val">0w</span>
-                <div class="trip-controls" style="margin-left:8px; display:flex; gap:2px;">
-                    <button class="trip-btn" onclick="tripStart()" title="Start">▶</button>
-                    <button class="trip-btn" onclick="tripPause()" title="Pausa">II</button>
-                    <button class="trip-btn" onclick="tripReset()" title="Reset/Stop">■</button>
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <span>Giorni</span>
+                    <button class="tool-btn" onclick="setDay('ALL')" title="Vedi Mese Intero" style="font-size:0.8rem; border:1px solid var(--border);">Vedi Mese</button>
                 </div>
-            </div>
+                <ul class="day-list" id="day-list">
+                    </ul>
+            </aside>
 
-            <div class="metric-item" title="Parole totali nel diario (Mese)">
-                <span>📚 Mese:</span> <span id="count-today" class="metric-val">0</span>
-            </div>
-             <div class="metric-item" title="Parole totali globali">
-                <span>🌍 Tot:</span> <span id="count-global" class="metric-val">...</span>
-            </div>
-            <div class="metric-item">
-                <span>💾</span> <span id="file-weight" class="metric-val">0 KB</span>
+            <div class="main-content">
+                
+                <div id="ai-coach-area">
+                    <div class="ai-title" id="ai-title">Coach</div>
+                    <div id="ai-message"></div>
+                    <div class="ai-actions" id="ai-actions"></div>
+                </div>
+
+                <div class="toolbar">
+                    <button class="tool-btn" onclick="triggerBrainstorm()" title="AI Brainstorming"><span class="material-icons-round" style="color:#ffd700;">lightbulb</span></button>
+                    <button class="tool-btn" onclick="openWalkTalk()" title="Walk & Talk"><span class="material-icons-round" style="color:#00e676;">pets</span></button>
+                    
+                    <button class="tool-btn" onclick="openAnalysisChat()" title="Analisi & Chat"><span class="material-icons-round" style="color:#ff9100;">forum</span></button>
+                    
+                    <button class="tool-btn" onclick="generateAiSummary()" title="Riassunto Statico"><span class="material-icons-round" style="color:#29b6f6;">auto_awesome</span></button>
+                    
+                    <div class="separator"></div>
+                    
+                    <button class="tool-btn" onclick="insertMood('💡')" title="Idea"><span class="material-icons-round" style="color:#ffff00;">emoji_objects</span></button>
+                    
+                    <div class="separator"></div>
+                    <button class="tool-btn" onclick="format('bold')"><span class="material-icons-round">format_bold</span></button>
+                    <button class="tool-btn" onclick="format('italic')"><span class="material-icons-round">format_italic</span></button>
+                    <button class="tool-btn" onclick="triggerImageUpload()"><span class="material-icons-round">add_photo_alternate</span></button>
+                </div>
+                
+                <div id="metrics-bar">
+                    <div class="metric-item trip-panel" style="border: 1px solid var(--accent); padding: 2px 8px; border-radius: 6px;">
+                        <span style="font-size:0.7rem; color:var(--accent); margin-right:5px;">TRIP</span>
+                        <span id="trip-timer" class="metric-val">00:00</span>
+                        <span style="margin:0 5px; opacity:0.5;">|</span>
+                        <span id="trip-words" class="metric-val">0w</span>
+                        <div class="trip-controls" style="margin-left:8px; display:flex; gap:2px;">
+                            <button class="trip-btn" onclick="tripStart()" title="Start">▶</button>
+                            <button class="trip-btn" onclick="tripPause()" title="Pausa">II</button>
+                            <button class="trip-btn" onclick="tripReset()" title="Reset/Stop">■</button>
+                        </div>
+                    </div>
+
+                    <div class="metric-item"><span>📝 Day:</span> <span id="count-today" class="metric-val">0</span></div>
+                    <div class="metric-item"><span>🌍 Tot:</span> <span id="count-global" class="metric-val">...</span></div>
+                </div>
+
+                <div id="editor" contenteditable="true" onkeyup="handleKeyUp(event)"></div>
             </div>
         </div>
-
-        <input type="file" id="img-input" accept="image/*" onchange="handleImageUpload(this)">
-
-        <main>
-            <div id="editor" contenteditable="true" onkeyup="handleKeyUp(event)"></div>
-        </main>
     </div>
 
     <div id="chat-modal" class="modal">
@@ -100,12 +108,8 @@
                 <h2 style="margin:0; font-size:1.2rem; color:var(--accent);">Coach Chat 🧠</h2>
                 <button onclick="closeAnalysisChat()" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
             </div>
-            
-            <div id="chat-history-container" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 0;">
-                </div>
-
+            <div id="chat-history-container" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 0;"></div>
             <div id="chat-loading" style="display:none; text-align:center; font-style:italic; color:#888; margin: 5px 0;">Gemini sta scrivendo...</div>
-
             <div style="border-top:1px solid var(--border); padding-top:10px;">
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="chat-user-input" placeholder="Rispondi..." style="flex-grow:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" onkeyup="if(event.key==='Enter') sendChatMessage()">
@@ -122,15 +126,12 @@
                 <h2>To-Do List 📝</h2>
                 <button onclick="document.getElementById('todo-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button>
             </div>
-            <p style="font-size:0.8rem; color:#888;">Gestisci i task presenti nel diario.</p>
             <div id="todo-list-container"></div>
         </div>
     </div>
 
     <div id="summary-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Riassunto AI 🤖</h2><button onclick="document.getElementById('summary-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div id="ai-summary-content"></div></div></div>
-    
     <div id="tag-modal" class="modal"><div class="modal-content"><div style="display:flex; justify-content:space-between;"><h2>Esplora Tag</h2><button onclick="document.getElementById('tag-modal').classList.remove('open')" style="background:none; border:none; color:inherit; font-size:1.5rem;">&times;</button></div><div style="padding:10px 0; border-bottom:1px solid #444; margin-bottom:10px;"><div id="tag-cloud"></div></div><div id="tag-results"></div></div></div>
-    
     <div id="walk-talk-modal" class="modal" style="background:var(--bg);"><div id="walk-talk-content" class="modal-content" style="height:100%; width:100%; max-width:100%; border-radius:0; justify-content: center;"><div style="position:absolute; top:20px; right:20px;"><button onclick="closeWalkTalk()" style="background:none; border:none; color:var(--text); font-size:2rem;">&times;</button></div><h2 style="color:var(--accent); margin-bottom:10px;">Walk & Talk</h2><div id="walk-status">Pronto?</div><div id="walk-transcript">Premi il microfono.</div><button id="walk-mic-btn" class="big-mic-btn" onclick="toggleWalkSession()"><span class="material-icons-round" style="font-size:3rem;">mic</span></button></div></div>
     
     <div id="coach-manager-modal" class="modal">
@@ -143,7 +144,6 @@
                 <input type="text" id="new-prompt-input" placeholder="Scrivi una nuova domanda..." onkeyup="if(event.key==='Enter') addCoachPrompt()">
                 <button class="btn-primary" style="padding: 8px 15px; border-radius: 8px;" onclick="addCoachPrompt()">Aggiungi</button>
             </div>
-            <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Le domande sono ordinate per frequenza d'uso:</div>
             <div id="coach-list-container"></div>
         </div>
     </div>
@@ -158,32 +158,28 @@
                 <label style="font-size:0.8rem; color:#888;">Font Editor</label>
                 <select id="font-family-select" onchange="changeEditorFont(this.value)" style="width:100%; padding:8px; margin-bottom:10px; border-radius:5px; background:var(--bg); color:var(--text); border:1px solid var(--border);">
                     <option value="system-ui">System (Default)</option>
-                    <option value="'Courier New', monospace">Monospace (Typewriter)</option>
-                    <option value="'Georgia', serif">Serif (Libro)</option>
-                    <option value="'Verdana', sans-serif">Verdana (Leggibile)</option>
+                    <option value="'Courier New', monospace">Monospace</option>
+                    <option value="'Georgia', serif">Serif</option>
+                    <option value="'Verdana', sans-serif">Verdana</option>
                 </select>
-                
                 <label style="font-size:0.8rem; color:#888;">Grandezza Testo</label>
                 <select id="font-size-select" onchange="changeEditorSize(this.value)" style="width:100%; padding:8px; margin-bottom:10px; border-radius:5px; background:var(--bg); color:var(--text); border:1px solid var(--border);">
                     <option value="0.9rem">Piccolo</option>
                     <option value="1.1rem" selected>Normale</option>
                     <option value="1.3rem">Grande</option>
-                    <option value="1.5rem">Molto Grande</option>
                 </select>
             </div>
-
             <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="toggleTheme()">Tema Light/Dark 🌓</button></div>
             <div style="margin-top:10px;"><button style="width:100%; padding:10px;" onclick="exportData()">💾 Scarica Pagina</button></div>
-            <div style="margin-top:10px;"><button style="width:100%; padding:10px; background:#ff5252; color:white; border:none;" onclick="forceAppRefresh()">🔄 Aggiorna App (Fix Mobile)</button></div>
-            
+            <div style="margin-top:10px;"><button style="width:100%; padding:10px; background:#ff5252; color:white; border:none;" onclick="forceAppRefresh()">🔄 Reset App (V16.0)</button></div>
             <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
             <h3>🤖 Google Gemini AI</h3>
-            <p style="font-size:0.7rem; color:#888;">La chiave è salvata nel tuo browser (LocalStorage). È sicuro per uso personale.</p>
             <input type="password" id="gemini-api-key" placeholder="Incolla AIzaSy..." style="width:100%; padding:10px; margin-top:5px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:5px;">
             <button style="width:100%; padding:10px; margin-top:10px; background:var(--accent); color:white; border:none; border-radius:5px;" onclick="saveApiKey()">Salva Chiave</button>
         </div>
     </div>
-
-    <script type="module" src="app.js?v=14.9"></script>
+    
+    <input type="file" id="img-input" accept="image/*" onchange="handleImageUpload(this)">
+    <script type="module" src="app.js?v=16.0"></script>
 </body>
 </html>
