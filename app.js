@@ -140,29 +140,37 @@ function updateDateDisplay() {
 }
 
 // --- NAVIGAZIONE GIORNALIERA ---
-window.changeDay = (offset) => {
-    // 1. SALVATAGGIO FORZATO: Prima di muoverci, salviamo lo stato attuale in memoria e DB
-    // Questo previene la perdita dell'ultima frase scritta.
+window.changeDay = async (offset) => {
+    // 1. SALVATAGGIO FORZATO E ATTESA
+    // Dobbiamo aspettare che finisca (await) PRIMA di cambiare data
     if (!isMonthlyView) {
-        saveData(true); // true = force immediate execution
+        await saveData(true); 
     }
     
-    // 2. Cambia la data
+    // 2. ORA possiamo cambiare la data sicuri che i dati vecchi sono in memoria/db
     currentDate.setDate(currentDate.getDate() + offset);
-    handleDateChange();
+    
+    // 3. Aggiorniamo la vista
+    await handleDateChange();
 };
 
 window.triggerDatePicker = () => {
     document.getElementById('date-input-hidden').showPicker();
 };
 
-window.jumpToDate = (val) => {
+window.jumpToDate = async (val) => {
     if(!val) return;
+    
+    // 1. SALVATAGGIO FORZATO E ATTESA
     if (!isMonthlyView) {
-        saveData(true);
+        await saveData(true);
     }
+    
+    // 2. Cambia data
     currentDate = new Date(val);
-    handleDateChange();
+    
+    // 3. Aggiorna vista
+    await handleDateChange();
 };
 
 async function handleDateChange() {
@@ -295,23 +303,27 @@ async function saveData(forceImmediate = false) {
     statusLabel.innerText = "Saving..."; statusLabel.style.color = "orange";
     
     try {
-        const currentDayStr = getCurrentDayString();
-        const content = document.getElementById('editor').innerHTML;
+        // CATTURA LO STATO ATTUALE SUBITO
+        // Usiamo una variabile locale per il giorno corrente, così se la data globale cambia
+        // mentre salviamo, noi abbiamo "congelato" quella giusta.
+        const dayStringAtMomentOfSave = getCurrentDayString(); 
+        const contentToSave = document.getElementById('editor').innerHTML;
         const wordsToday = updateCounts();
         
-        // 1. Aggiorna Cache Locale Immediatamente
-        currentMonthData.days[currentDayStr] = content;
+        // 1. AGGIORNAMENTO MEMORIA LOCALE (CRITICO)
+        // Questo deve avvenire prima di qualsiasi await
+        if (!currentMonthData.days) currentMonthData.days = {};
+        currentMonthData.days[dayStringAtMomentOfSave] = contentToSave;
         
         // 2. Harvest Dati
         collectedTasks = harvestTasks();
         const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
 
-        // 3. Prepara Update Firebase (Nested Fields)
-        // Usiamo la sintassi "days.05" per aggiornare SOLO quel campo senza sovrascrivere tutto il documento
+        // 3. Prepara Update Firebase
         const updateObj = {};
-        updateObj[`days.${currentDayStr}`] = content;
+        updateObj[`days.${dayStringAtMomentOfSave}`] = contentToSave;
         updateObj['lastUpdate'] = new Date();
-        updateObj['tasks'] = collectedTasks; // Aggiorna lista task del mese
+        updateObj['tasks'] = collectedTasks;
         
         if (detectedTags.length > 0) {
             updateObj['tags'] = detectedTags;
@@ -331,7 +343,6 @@ async function saveData(forceImmediate = false) {
         statusLabel.style.color = "red"; 
     }
 }
-
 // --- INPUT LISTENERS (LOGICA ANTI-BUG & FEATURES) ---
 document.getElementById('editor').addEventListener('input', (e) => {
     if (isMonthlyView) return;
