@@ -184,22 +184,23 @@ window.jumpToDate = async (val) => {
     await handleDateChange();
 };
 
+// --- GESTIONE CAMBIO DATA ---
 async function handleDateChange() {
     isMonthlyView = false;
     updateDateDisplay();
     
-    // Calcoliamo il mese della nuova data selezionata
     const newMonthStr = getCurrentMonthString();
     
-    // IL FIX CRITICO:
-    // Se il mese della nuova data è DIVERSO da quello che abbiamo in memoria...
+    // SE IL MESE È CAMBIATO:
+    // Scarichiamo i nuovi dati dal server.
     if (newMonthStr !== currentMonthString) {
-        // ...allora scarichiamo i nuovi dati dal database.
-        currentMonthString = newMonthStr; // Aggiorniamo la variabile globale
+        currentMonthString = newMonthStr;
         await loadMonthData(newMonthStr);
-    } else {
-        // ...ALTRIMENTI, se siamo nello stesso mese (es. dal 22 al 23),
-        // NON ricaricare dal DB. Usa i dati che hai già in memoria (che contengono le tue ultime modifiche).
+    } 
+    // SE IL MESE È LO STESSO:
+    // NON facciamo nulla con il database. 
+    // I dati li abbiamo già in `currentMonthData` (aggiornati da saveData).
+    else {
         renderEditorForDay(getCurrentDayString());
     }
 }
@@ -207,22 +208,18 @@ async function handleDateChange() {
 // --- CORE: CARICAMENTO DATI (FIX BUG SOVRASCRITTURA) ---
 let currentSnapshotUnsubscribe = null; // Per pulire listener se necessario (opzionale)
 
+// --- CARICAMENTO "UNA TANTUM" (NO CONFLITTI) ---
 async function loadMonthData(monthStr) {
     document.getElementById('db-status').innerText = "Loading...";
     
-    // PULIZIA: Se c'era un ascolto attivo sul mese precedente, staccalo.
-    // Questo evita conflitti se cambi mese velocemente.
-    if (unsubscribeSnapshot) {
-        unsubscribeSnapshot();
-        unsubscribeSnapshot = null;
-    }
-    
+    // Riferimento al documento
     const docRef = doc(db, "diario", currentUser.uid, "entries", monthStr);
     
-    // Salviamo la funzione di unsubscribe nella variabile globale
-    unsubscribeSnapshot = onSnapshot(docRef, (snap) => {
-        // Se l'utente sta scrivendo, ignoriamo gli aggiornamenti esterni per non disturbare
-        const userIsTyping = isLocalChange || (document.activeElement && document.activeElement.id === 'editor');
+    try {
+        // CAMBIAMENTO CHIAVE: Usiamo getDoc invece di onSnapshot.
+        // Scarichiamo i dati una volta sola. Nessun aggiornamento automatico
+        // che rischia di sovrascrivere il tuo lavoro mentre scrivi.
+        const snap = await getDoc(docRef);
         
         if (snap.exists()) {
             const data = snap.data();
@@ -233,20 +230,22 @@ async function loadMonthData(monthStr) {
                 currentMonthData = { days: data.days || {}, tasks: data.tasks || [] };
             }
         } else {
-            // Mese nuovo/vuoto
+            // Se il mese non esiste ancora, creiamo una struttura vuota
             currentMonthData = { days: {}, tasks: [] };
         }
         
-        // Aggiorna l'editor solo se necessario
-        if (!userIsTyping && !isMonthlyView) {
-            renderEditorForDay(getCurrentDayString());
-        }
+        // Renderizziamo la pagina
+        renderEditorForDay(getCurrentDayString());
         
-        document.getElementById('db-status').innerText = "Sync OK";
+        document.getElementById('db-status').innerText = "Loaded";
         document.getElementById('db-status').style.color = "#00e676";
-    });
+        
+    } catch (e) {
+        console.error("Errore caricamento mese:", e);
+        document.getElementById('db-status').innerText = "Error";
+        document.getElementById('db-status').style.color = "red";
+    }
 }
-
 // --- RENDERING EDITOR ---
 function renderEditorForDay(dayStr) {
     const editor = document.getElementById('editor');
