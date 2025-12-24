@@ -145,15 +145,21 @@ function updateDateDisplay() {
 
 // --- NAVIGAZIONE GIORNALIERA ---
 window.changeDay = async (offset) => {
-    // 1. PRIMA salviamo lo stato attuale in memoria (Sincrono + Async DB)
+    // 1. FOTOGRAFA LA SITUAZIONE ATTUALE
     if (!isMonthlyView) {
-        await saveData(true); 
+        const currentContent = document.getElementById('editor').innerHTML;
+        const currentDayID = getCurrentDayString();
+        
+        // 2. SALVA ESPLICITAMENTE IL GIORNO CHE STIAMO LASCIANDO
+        // Non usiamo await qui per non bloccare l'interfaccia (fire & forget),
+        // tanto abbiamo aggiornato la cache locale dentro saveData.
+        saveData(true, currentDayID, currentContent);
     }
     
-    // 2. POI cambiamo data
+    // 3. ORA POSSIAMO CAMBIARE DATA IN SICUREZZA
     currentDate.setDate(currentDate.getDate() + offset);
     
-    // 3. AGGIORNIAMO la vista
+    // 4. AGGIORNA VISTA
     await handleDateChange();
 };
 
@@ -163,10 +169,18 @@ window.triggerDatePicker = () => {
 
 window.jumpToDate = async (val) => {
     if(!val) return;
+    
+    // 1. FOTOGRAFA E SALVA IL VECCHIO GIORNO
     if (!isMonthlyView) {
-        await saveData(true);
+        const currentContent = document.getElementById('editor').innerHTML;
+        const currentDayID = getCurrentDayString();
+        saveData(true, currentDayID, currentContent);
     }
+    
+    // 2. CAMBIA DATA
     currentDate = new Date(val);
+    
+    // 3. AGGIORNA VISTA
     await handleDateChange();
 };
 
@@ -294,51 +308,51 @@ function renderMonthlyView() {
 
 // --- CORE: SALVATAGGIO ---
 // --- SALVATAGGIO BLINDATO ---
-async function saveData(forceImmediate = false) {
+// --- SALVATAGGIO ROBUSTO ---
+// Ora accetta parametri specifici per "congelare" il dato prima di muoversi
+async function saveData(forceImmediate = false, specificDayId = null, specificContent = null) {
     if (!currentUser || isMonthlyView) return;
     
     const statusLabel = document.getElementById('db-status');
-    statusLabel.innerText = "Saving..."; 
-    statusLabel.style.color = "orange";
+    statusLabel.innerText = "Saving..."; statusLabel.style.color = "orange";
     
     try {
-        // CATTURA DATI ATTUALI
-        const dayKey = getCurrentDayString(); 
-        const content = document.getElementById('editor').innerHTML;
-        const wordsToday = updateCounts();
+        // 1. Determina QUALI dati salvare. 
+        // Se passiamo specificDayId, usiamo quello (salvataggio durante navigazione).
+        // Altrimenti usiamo quello che c'è ora a schermo.
+        const dayKey = specificDayId || getCurrentDayString();
+        const content = specificContent !== null ? specificContent : document.getElementById('editor').innerHTML;
         
-        // 1. AGGIORNAMENTO MEMORIA LOCALE (IMMEDIATO E PRIORITARIO)
-        // Scriviamo direttamente nella cache. Questo assicura che se cambi giorno
-        // e torni indietro, il dato è LÌ, indipendentemente da Firebase.
+        // 2. AGGIORNAMENTO MEMORIA LOCALE (IMMEDIATO)
+        // Scriviamo SUBITO nella cache locale, così se torni indietro il dato c'è già,
+        // senza aspettare Internet.
         if (!currentMonthData.days) currentMonthData.days = {};
         currentMonthData.days[dayKey] = content;
         
-        // 2. PREPARAZIONE UPDATE FIREBASE
-        collectedTasks = harvestTasks();
-        const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
+        // 3. PREPARA UPDATE PER FIREBASE
+        // Nota: I task e i tag li prendiamo sempre live, ma per la navigazione ci interessa il testo
+        collectedTasks = harvestTasks(); 
+        const detectedTags = detectTagsInContent(content.replace(/<[^>]*>?/gm, ' ')); // Strip HTML per analisi tag
 
         const updateObj = {};
-        updateObj[`days.${dayKey}`] = content; // Aggiorna solo questo campo
+        updateObj[`days.${dayKey}`] = content;
         updateObj['lastUpdate'] = new Date();
-        updateObj['tasks'] = collectedTasks;
+        // Aggiorniamo i task solo se stiamo salvando la pagina corrente attiva
+        if (!specificDayId) updateObj['tasks'] = collectedTasks;
         if (detectedTags.length > 0) updateObj['tags'] = detectedTags;
 
-        // 3. INVIO ASINCRONO (Non blocca l'UI se fallisce o ritarda)
+        // 4. INVIO AL DB
         const docRef = doc(db, "diario", currentUser.uid, "entries", getCurrentMonthString());
-        
-        // Usiamo setDoc con merge per essere sicuri che il documento esista
         await setDoc(docRef, updateObj, { merge: true });
         
-        // Update Stats (Background)
+        // Update Stats
         setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { lastUpdate: new Date() }, { merge: true });
 
-        statusLabel.innerText = "Saved"; 
-        statusLabel.style.color = "#00e676";
+        statusLabel.innerText = "Saved"; statusLabel.style.color = "#00e676";
         
     } catch (error) { 
         console.error("Save Error:", error); 
-        statusLabel.innerText = "Err"; 
-        statusLabel.style.color = "red"; 
+        statusLabel.innerText = "Err"; statusLabel.style.color = "red"; 
     }
 }
 // --- INPUT LISTENERS (LOGICA ANTI-BUG & FEATURES) ---
