@@ -119,15 +119,19 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- HELPER DATE ---
 // Restituisce "YYYY-MM" (es: 2025-10) per il nome del documento Firebase
+function getLocalISOString(date) {
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString();
+}
+
 function getCurrentMonthString() {
-    return currentDate.toISOString().slice(0, 7); 
+    return getLocalISOString(currentDate).slice(0, 7); // "YYYY-MM" Locale
 }
 
-// Restituisce "DD" (es: 05) per la chiave all'interno del documento
 function getCurrentDayString() {
-    return currentDate.getDate().toString().padStart(2, '0');
+    return currentDate.getDate().toString().padStart(2, '0'); // "DD" Locale
 }
-
 function updateDateDisplay() {
     // Aggiorna il testo nell'header (es: Lunedì 23 Ottobre 2025)
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -141,16 +145,15 @@ function updateDateDisplay() {
 
 // --- NAVIGAZIONE GIORNALIERA ---
 window.changeDay = async (offset) => {
-    // 1. SALVATAGGIO FORZATO E ATTESA
-    // Dobbiamo aspettare che finisca (await) PRIMA di cambiare data
+    // 1. PRIMA salviamo lo stato attuale in memoria (Sincrono + Async DB)
     if (!isMonthlyView) {
         await saveData(true); 
     }
     
-    // 2. ORA possiamo cambiare la data sicuri che i dati vecchi sono in memoria/db
+    // 2. POI cambiamo data
     currentDate.setDate(currentDate.getDate() + offset);
     
-    // 3. Aggiorniamo la vista
+    // 3. AGGIORNIAMO la vista
     await handleDateChange();
 };
 
@@ -160,16 +163,10 @@ window.triggerDatePicker = () => {
 
 window.jumpToDate = async (val) => {
     if(!val) return;
-    
-    // 1. SALVATAGGIO FORZATO E ATTESA
     if (!isMonthlyView) {
         await saveData(true);
     }
-    
-    // 2. Cambia data
     currentDate = new Date(val);
-    
-    // 3. Aggiorna vista
     await handleDateChange();
 };
 
@@ -296,49 +293,50 @@ function renderMonthlyView() {
 }
 
 // --- CORE: SALVATAGGIO ---
+// --- SALVATAGGIO BLINDATO ---
 async function saveData(forceImmediate = false) {
     if (!currentUser || isMonthlyView) return;
     
     const statusLabel = document.getElementById('db-status');
-    statusLabel.innerText = "Saving..."; statusLabel.style.color = "orange";
+    statusLabel.innerText = "Saving..."; 
+    statusLabel.style.color = "orange";
     
     try {
-        // CATTURA LO STATO ATTUALE SUBITO
-        // Usiamo una variabile locale per il giorno corrente, così se la data globale cambia
-        // mentre salviamo, noi abbiamo "congelato" quella giusta.
-        const dayStringAtMomentOfSave = getCurrentDayString(); 
-        const contentToSave = document.getElementById('editor').innerHTML;
+        // CATTURA DATI ATTUALI
+        const dayKey = getCurrentDayString(); 
+        const content = document.getElementById('editor').innerHTML;
         const wordsToday = updateCounts();
         
-        // 1. AGGIORNAMENTO MEMORIA LOCALE (CRITICO)
-        // Questo deve avvenire prima di qualsiasi await
+        // 1. AGGIORNAMENTO MEMORIA LOCALE (IMMEDIATO E PRIORITARIO)
+        // Scriviamo direttamente nella cache. Questo assicura che se cambi giorno
+        // e torni indietro, il dato è LÌ, indipendentemente da Firebase.
         if (!currentMonthData.days) currentMonthData.days = {};
-        currentMonthData.days[dayStringAtMomentOfSave] = contentToSave;
+        currentMonthData.days[dayKey] = content;
         
-        // 2. Harvest Dati
+        // 2. PREPARAZIONE UPDATE FIREBASE
         collectedTasks = harvestTasks();
         const detectedTags = detectTagsInContent(document.getElementById('editor').innerText);
 
-        // 3. Prepara Update Firebase
         const updateObj = {};
-        updateObj[`days.${dayStringAtMomentOfSave}`] = contentToSave;
+        updateObj[`days.${dayKey}`] = content; // Aggiorna solo questo campo
         updateObj['lastUpdate'] = new Date();
         updateObj['tasks'] = collectedTasks;
-        
-        if (detectedTags.length > 0) {
-            updateObj['tags'] = detectedTags;
-        }
+        if (detectedTags.length > 0) updateObj['tags'] = detectedTags;
 
+        // 3. INVIO ASINCRONO (Non blocca l'UI se fallisce o ritarda)
         const docRef = doc(db, "diario", currentUser.uid, "entries", getCurrentMonthString());
+        
+        // Usiamo setDoc con merge per essere sicuri che il documento esista
         await setDoc(docRef, updateObj, { merge: true });
         
-        // 4. Update Global Stats
-        await setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { lastUpdate: new Date() }, { merge: true });
+        // Update Stats (Background)
+        setDoc(doc(db, "diario", currentUser.uid, "stats", "global"), { lastUpdate: new Date() }, { merge: true });
 
-        statusLabel.innerText = "Saved"; statusLabel.style.color = "#00e676";
+        statusLabel.innerText = "Saved"; 
+        statusLabel.style.color = "#00e676";
         
     } catch (error) { 
-        console.error("Errore salvataggio:", error); 
+        console.error("Save Error:", error); 
         statusLabel.innerText = "Err"; 
         statusLabel.style.color = "red"; 
     }
